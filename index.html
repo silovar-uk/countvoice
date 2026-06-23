@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0A0A" />
+    <meta
+      name="description"
+      content="節目を音声で読み上げる、ブラウザだけで動くカウントアプリ"
+    />
+    <title>COUNT / VOICE</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell" aria-describedby="app-status">
+      <header class="app-header">
+        <p class="brand" aria-label="カウントボイス">COUNT / VOICE</p>
+        <div id="header-action" class="header-action"></div>
+      </header>
+
+      <section class="timer-stage" aria-labelledby="mode-label">
+        <p id="mode-label" class="mode-label" data-mode="stopped">準備完了</p>
+
+        <time
+          id="elapsed-time"
+          class="timer"
+          role="timer"
+          aria-live="off"
+          aria-label="経過時間 0秒"
+          datetime="PT0S"
+        >
+          <span aria-hidden="true">00:00</span>
+        </time>
+
+        <p id="sound-hint" class="sound-hint" hidden>音声：オフ</p>
+      </section>
+
+      <section class="control-dock" aria-label="カウント操作">
+        <div id="primary-controls" class="primary-controls"></div>
+      </section>
+    </main>
+
+    <p id="app-status" class="sr-only" role="status" aria-live="polite"></p>
+
+    <dialog id="settings-dialog" class="sheet-dialog" aria-labelledby="settings-title">
+      <form method="dialog" class="sheet-content" id="settings-form">
+        <div class="sheet-handle" aria-hidden="true"></div>
+
+        <header class="sheet-header">
+          <div>
+            <p class="eyebrow">VOICE</p>
+            <h2 id="settings-title">音声設定</h2>
+          </div>
+          <button
+            id="close-settings"
+            class="icon-button"
+            type="button"
+            aria-label="音声設定を閉じる"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+
+        <div class="setting-stack">
+          <section class="setting-group" aria-labelledby="voice-label">
+            <div class="setting-heading">
+              <div>
+                <p id="voice-label" class="setting-title">声</p>
+                <p class="setting-copy">端末で使える日本語音声を選択</p>
+              </div>
+            </div>
+
+            <label class="sr-only" for="voice-select">音声を選択</label>
+            <select id="voice-select" class="select-control" name="voice"></select>
+            <button id="test-voice" class="secondary-button" type="button">
+              この声を試す
+            </button>
+          </section>
+
+          <section class="setting-group" aria-labelledby="rate-label">
+            <div class="setting-heading">
+              <div>
+                <p id="rate-label" class="setting-title">速度</p>
+                <p class="setting-copy">カウントの話す速さ</p>
+              </div>
+            </div>
+            <div id="rate-options" class="segmented-control" role="group" aria-label="音声速度"></div>
+          </section>
+
+          <section class="setting-group" aria-labelledby="volume-label">
+            <div class="setting-heading">
+              <div>
+                <p id="volume-label" class="setting-title">音量</p>
+                <p class="setting-copy">端末音量とは別に調整</p>
+              </div>
+            </div>
+            <div id="volume-options" class="segmented-control" role="group" aria-label="音声音量"></div>
+          </section>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="reset-dialog" class="confirm-dialog" aria-labelledby="reset-title" aria-describedby="reset-copy">
+      <form method="dialog" class="confirm-content">
+        <p class="eyebrow">RESET</p>
+        <h2 id="reset-title">カウントをリセットしますか？</h2>
+        <p id="reset-copy" class="confirm-copy">この操作をすると、現在の経過時間は0:00に戻ります。</p>
+        <div class="confirm-actions">
+          <button id="cancel-reset" class="secondary-button" type="button">キャンセル</button>
+          <button id="confirm-reset" class="danger-button" type="button">リセット</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="settings-button-template">
+      <button class="icon-button" type="button" aria-label="音声設定を開く">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+          <path d="M3.5 13.5v-3l2.08-.56a6.82 6.82 0 0 1 .62-1.49L5.12 6.58l2.12-2.12 1.87 1.08a6.82 6.82 0 0 1 1.49-.62L11.16 2h3l.56 2.92c.52.16 1.02.37 1.49.62l1.87-1.08 2.12 2.12-1.08 1.87c.25.47.46.97.62 1.49l2.92.56v3l-2.92.56a6.82 6.82 0 0 1-.62 1.49l1.08 1.87-2.12 2.12-1.87-1.08a6.82 6.82 0 0 1-1.49.62L14.16 22h-3l-.56-2.92a6.82 6.82 0 0 1-1.49-.62l-1.87 1.08-2.12-2.12 1.08-1.87a6.82 6.82 0 0 1-.62-1.49L3.5 13.5Z" />
+        </svg>
+      </button>
+    </template>
+
+    <template id="sound-button-template">
+      <button class="icon-button sound-toggle" type="button" aria-pressed="true" aria-label="音声をオフにする">
+        <svg class="speaker-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 10v4h4l5 4V6L8 10H4Z" />
+          <path class="sound-wave sound-wave-one" d="M16 9.5a4 4 0 0 1 0 5" />
+          <path class="sound-wave sound-wave-two" d="M18.8 7a7 7 0 0 1 0 10" />
+          <path class="mute-line" d="M4 4l16 16" />
+        </svg>
+      </button>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
