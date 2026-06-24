@@ -191,6 +191,13 @@ h2 {
   grid-template-columns: auto auto auto;
 }
 
+.url-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+}
+
 #packInput {
   position: absolute;
   inline-size: 1px;
@@ -222,6 +229,7 @@ h2 {
   .settings-grid,
   .primary-actions,
   .file-row,
+  .url-row,
   .voicevox-row {
     grid-template-columns: 1fr;
   }

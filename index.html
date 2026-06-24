@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#101316" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>毎秒カウント</title>
     <link rel="manifest" href="./manifest.webmanifest?v=5" />
     <link rel="stylesheet" href="./styles.css?v=5" />
@@ -78,6 +80,10 @@
           <button id="clearPackBtn">削除</button>
           <button id="testVoiceBtn">試聴</button>
         </div>
+        <div class="url-row">
+          <input id="packUrl" type="url" value="./packs/poncount__zundamon-normal__standard__1.35__20260624__v01.ponvoice" aria-label="音声パックURL" />
+          <button id="loadPackUrlBtn">URLから読込</button>
+        </div>
       </section>
 
       <section class="voice-card" aria-label="VOICEVOX接続">
@@ -103,6 +109,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=5" type="module"></script>
+    <script src="./app.js?v=8" type="module"></script>
   </body>
 </html>

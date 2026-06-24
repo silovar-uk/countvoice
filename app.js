@@ -1,6 +1,6 @@
-import { AudioStore, arrayBufferToBase64 } from "./audio.js?v=5";
-import { cueTextForSecond, cueTextsForPack } from "./count-format.js?v=5";
-import { deleteValue, getValue, setValue } from "./db.js?v=5";
+import { AudioStore, arrayBufferToBase64 } from "./audio.js?v=8";
+import { cueTextForSecond, cueTextsForPack } from "./count-format.js?v=8";
+import { deleteValue, getValue, setValue } from "./db.js?v=8";
 
 const audioStore = new AudioStore();
 const state = {
@@ -12,6 +12,7 @@ const state = {
   pack: null,
   speakers: [],
   selectedStyleId: null,
+  wakeLock: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +29,8 @@ const els = {
   intervalSeconds: $("intervalSeconds"),
   audioSource: $("audioSource"),
   packInput: $("packInput"),
+  packUrl: $("packUrl"),
+  loadPackUrlBtn: $("loadPackUrlBtn"),
   clearPackBtn: $("clearPackBtn"),
   testVoiceBtn: $("testVoiceBtn"),
   packStatus: $("packStatus"),
@@ -57,13 +60,22 @@ function bindEvents() {
   els.mode.addEventListener("change", reset);
   els.targetSeconds.addEventListener("change", reset);
   els.packInput.addEventListener("change", importPack);
+  els.loadPackUrlBtn.addEventListener("click", loadPackFromUrl);
   els.clearPackBtn.addEventListener("click", clearPack);
   els.testVoiceBtn.addEventListener("click", () => speakCue("1"));
   els.connectBtn.addEventListener("click", connectVoicevox);
   els.prepareBtn.addEventListener("click", prepareVoicevoxClips);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 }
 
 async function restorePack() {
+  const initialPackUrl = new URLSearchParams(location.search).get("pack");
+  if (initialPackUrl) {
+    els.packUrl.value = initialPackUrl;
+    await loadPackFromUrl();
+    return;
+  }
+
   const pack = await getValue("pack");
   if (!pack) return;
   state.pack = pack;
@@ -77,15 +89,17 @@ async function start() {
   }
   if (state.running) return;
   state.running = true;
-  state.startedAt = performance.now() - state.pausedElapsed * 1000;
+  state.startedAt = Date.now() - state.pausedElapsed * 1000;
   state.nextSecond = Math.floor(state.pausedElapsed) + 1;
+  await requestWakeLock();
   tick();
 }
 
 function pause() {
+  state.pausedElapsed = elapsedSeconds();
   state.running = false;
   clearTimeout(state.timerId);
-  state.pausedElapsed = elapsedSeconds();
+  releaseWakeLock();
   render();
 }
 
@@ -94,6 +108,7 @@ function reset() {
   clearTimeout(state.timerId);
   state.pausedElapsed = 0;
   state.nextSecond = 1;
+  releaseWakeLock();
   render();
 }
 
@@ -101,10 +116,14 @@ function tick() {
   if (!state.running) return;
   const elapsed = elapsedSeconds();
   const target = targetSeconds();
+  const elapsedFloor = Math.floor(elapsed);
+  if (elapsedFloor - state.nextSecond > 3) {
+    state.nextSecond = elapsedFloor;
+  }
   const visible = els.mode.value === "down" ? Math.max(0, target - Math.floor(elapsed)) : Math.floor(elapsed);
   els.countDisplay.textContent = visible;
 
-  while (state.nextSecond <= Math.floor(elapsed)) {
+  while (state.nextSecond <= elapsedFloor) {
     const countValue = els.mode.value === "down" ? Math.max(0, target - state.nextSecond) : state.nextSecond;
     if (shouldSpeak(state.nextSecond, countValue)) {
       speakCue(cueTextForSecond(countValue));
@@ -125,7 +144,36 @@ function tick() {
 
 function elapsedSeconds() {
   if (!state.running) return state.pausedElapsed;
-  return Math.max(0, (performance.now() - state.startedAt) / 1000);
+  return Math.max(0, (Date.now() - state.startedAt) / 1000);
+}
+
+async function handleVisibilityChange() {
+  if (!state.running) return;
+  if (document.visibilityState === "visible") {
+    state.nextSecond = Math.max(state.nextSecond, Math.floor(elapsedSeconds()));
+    await requestWakeLock();
+    tick();
+  } else {
+    clearTimeout(state.timerId);
+  }
+}
+
+async function requestWakeLock() {
+  if (!("wakeLock" in navigator) || state.wakeLock) return;
+  try {
+    state.wakeLock = await navigator.wakeLock.request("screen");
+    state.wakeLock.addEventListener("release", () => {
+      state.wakeLock = null;
+    });
+  } catch {
+    state.wakeLock = null;
+  }
+}
+
+function releaseWakeLock() {
+  if (!state.wakeLock) return;
+  state.wakeLock.release().catch(() => {});
+  state.wakeLock = null;
 }
 
 function targetSeconds() {
@@ -170,17 +218,40 @@ async function importPack(event) {
   if (!file) return;
   try {
     const pack = JSON.parse(await file.text());
-    validatePack(pack);
-    state.pack = pack;
-    await setValue("pack", pack);
-    await audioStore.loadPack(pack);
+    await saveLoadedPack(pack);
     els.packStatus.textContent = `${pack.meta?.name ?? file.name} を取り込みました。`;
-    els.audioSource.value = "pack";
   } catch {
     els.packStatus.textContent = "PONVOICEとして読み込めませんでした。ファイルの中身を確認してください。";
   } finally {
     event.target.value = "";
   }
+}
+
+async function loadPackFromUrl() {
+  const rawUrl = els.packUrl.value.trim();
+  if (!rawUrl) {
+    els.packStatus.textContent = "音声パックURLを入力してください。";
+    return;
+  }
+
+  try {
+    els.packStatus.textContent = "URLから音声パックを読み込んでいます...";
+    const response = await fetch(rawUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const pack = JSON.parse(await response.text());
+    await saveLoadedPack(pack);
+    els.packStatus.textContent = `${pack.meta?.name ?? "音声パック"} をURLから読み込みました。`;
+  } catch {
+    els.packStatus.textContent = "URLからPONVOICEを読み込めませんでした。同じサイト内のURLか、CORS許可されたURLを指定してください。";
+  }
+}
+
+async function saveLoadedPack(pack) {
+  validatePack(pack);
+  state.pack = pack;
+  await setValue("pack", pack);
+  await audioStore.loadPack(pack);
+  els.audioSource.value = "pack";
 }
 
 async function clearPack() {

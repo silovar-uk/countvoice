@@ -1,5 +1,5 @@
-import { arrayBufferToBase64 } from "./audio.js?v=5";
-import { cueTextsForPack } from "./count-format.js?v=5";
+import { arrayBufferToBase64 } from "./audio.js?v=8";
+import { cueTextsForPack } from "./count-format.js?v=8";
 
 const $ = (id) => document.getElementById(id);
 const els = {

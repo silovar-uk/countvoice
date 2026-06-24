@@ -1,8 +1,19 @@
-$python = "C:\Users\vediv\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-if (-not (Test-Path -LiteralPath $python)) {
-  Write-Host "Pythonが見つかりません。別のHTTPサーバーでこのフォルダを公開してください。"
-  exit 1
+$port = 8765
+$python = Get-Command py -ErrorAction SilentlyContinue
+
+if ($python) {
+  Write-Host "http://127.0.0.1:$port/index.html を開いてください。"
+  & py -3 -m http.server $port
+  exit $LASTEXITCODE
 }
 
-Write-Host "http://127.0.0.1:8765/index.html を開いてください。"
-& $python -m http.server 8765
+$python = Get-Command python -ErrorAction SilentlyContinue
+
+if ($python) {
+  Write-Host "http://127.0.0.1:$port/index.html を開いてください。"
+  & python -m http.server $port
+  exit $LASTEXITCODE
+}
+
+Write-Host "Pythonが見つかりません。別のHTTPサーバーでこのフォルダを公開してください。"
+exit 1
