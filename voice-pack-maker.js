@@ -1,5 +1,5 @@
 import { arrayBufferToBase64 } from "./audio.js";
-import { cueTextsForPack } from "./count-format.js";
+import { DEFAULT_FINISH_MESSAGE, cueTextsForPack, normalizeFinishMessage } from "./count-format.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -8,9 +8,12 @@ const els = {
   speakerSelect: $("speakerSelect"),
   packSize: $("packSize"),
   speedScale: $("speedScale"),
+  finishMessage: $("finishMessage"),
+  finishPreview: $("finishPreview"),
   fileName: $("fileName"),
   createBtn: $("createBtn"),
   testBtn: $("testBtn"),
+  testFinishBtn: $("testFinishBtn"),
   stopBtn: $("stopBtn"),
   progress: $("progress"),
   progressText: $("progressText"),
@@ -22,13 +25,19 @@ let audio = new Audio();
 
 els.connectBtn.addEventListener("click", connect);
 els.createBtn.addEventListener("click", createPack);
-els.testBtn.addEventListener("click", testVoice);
+els.testBtn.addEventListener("click", () => testVoice("1"));
+els.testFinishBtn.addEventListener("click", () => testVoice(finishMessage()));
 els.stopBtn.addEventListener("click", () => {
   abort = true;
   audio.pause();
 });
 els.packSize.addEventListener("change", updateMax);
+els.finishMessage.addEventListener("input", () => {
+  renderFinishPreview();
+  updateMax();
+});
 
+renderFinishPreview();
 updateMax();
 
 async function connect() {
@@ -45,7 +54,7 @@ async function connect() {
         els.speakerSelect.append(option);
       }
     }
-    els.status.textContent = "接続しました。";
+    els.status.textContent = "接続しました。話者を選べます。";
     return true;
   } catch {
     els.status.textContent = "接続できませんでした。VOICEVOX Engineを起動してください。";
@@ -55,16 +64,20 @@ async function connect() {
 
 async function createPack() {
   if (!els.speakerSelect.value && !(await connect())) return;
+
   abort = false;
+  const finish = finishMessage();
   const texts = textsForPack();
   const clips = {};
   els.progress.max = texts.length;
   els.progress.value = 0;
+
   for (const [index, text] of texts.entries()) {
     if (abort) {
-      els.progressText.textContent = "停止しました。";
+      els.progressText.textContent = "停止しました。途中までのパックは保存されません。";
       return;
     }
+
     els.progressText.textContent = `${index + 1}/${texts.length}: ${text}`;
     let buffer;
     try {
@@ -73,33 +86,40 @@ async function createPack() {
       els.progressText.textContent = "音声作成に失敗しました。VOICEVOXの起動状態を確認してください。";
       return;
     }
+
     clips[text] = arrayBufferToBase64(buffer);
     els.progress.value = index + 1;
   }
+
   const pack = {
     kind: "ponvoice",
-    version: 1,
+    version: 2,
     meta: {
       name: els.fileName.value.replace(/\.ponvoice$/i, ""),
       createdAt: new Date().toISOString(),
       packSize: els.packSize.value,
       speakerStyleId: Number(els.speakerSelect.value),
       speedScale: Number(els.speedScale.value),
-      credit: "VOICEVOX",
+      finishMessage: finish,
+      credit: selectedCredit(),
     },
     clips,
   };
+
   downloadJson(pack, safeFileName(els.fileName.value));
-  els.progressText.textContent = "保存しました。";
+  els.progressText.textContent = `保存しました。終了メッセージ「${finish}」も含まれています。`;
 }
 
-async function testVoice() {
+async function testVoice(text) {
   if (!els.speakerSelect.value && !(await connect())) return;
-  const buffer = await synthesize("1").catch(() => null);
+  const buffer = await synthesize(text).catch(() => null);
   if (!buffer) {
     els.progressText.textContent = "試聴できませんでした。";
     return;
   }
+
+  audio.pause();
+  if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
   const blob = new Blob([buffer], { type: "audio/wav" });
   audio.src = URL.createObjectURL(blob);
   await audio.play().catch(() => {
@@ -125,7 +145,21 @@ async function synthesize(text) {
 }
 
 function textsForPack() {
-  return cueTextsForPack(els.packSize.value);
+  return cueTextsForPack(els.packSize.value, finishMessage());
+}
+
+function finishMessage() {
+  return normalizeFinishMessage(els.finishMessage.value || DEFAULT_FINISH_MESSAGE);
+}
+
+function selectedCredit() {
+  const label = els.speakerSelect.selectedOptions[0]?.textContent ?? "";
+  const speakerName = label.split(" /")[0].trim();
+  return speakerName ? `VOICEVOX: ${speakerName}` : "VOICEVOX";
+}
+
+function renderFinishPreview() {
+  els.finishPreview.textContent = `「${finishMessage()}」`;
 }
 
 function updateMax() {
@@ -150,11 +184,11 @@ function downloadJson(data, fileName) {
   link.href = url;
   link.download = fileName;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function safeFileName(value) {
-  const name = value || "poncount__voicevox__standard__v01.ponvoice";
+  const name = value || "poncount__voicevox__standard__end-message__v02.ponvoice";
   const safe = name.replace(/[\\/:*?"<>|]/g, "_").replace(/\.json$/i, ".ponvoice");
   return /\.ponvoice$/i.test(safe) ? safe : `${safe}.ponvoice`;
 }

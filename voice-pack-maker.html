@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101316" />
     <title>音声パック作成</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -22,15 +23,15 @@
           <p id="status">VOICEVOXを起動してから接続してください。</p>
         </div>
         <div class="voicevox-row">
-          <input id="engineUrl" type="url" value="http://127.0.0.1:50021" />
+          <input id="engineUrl" type="url" value="http://127.0.0.1:50021" aria-label="VOICEVOX Engine URL" />
           <button id="connectBtn">接続</button>
         </div>
       </section>
 
-      <section class="settings-grid">
+      <section class="settings-grid maker-settings" aria-label="音声パック設定">
         <div class="setting">
           <label for="speakerSelect">話者</label>
-          <select id="speakerSelect"></select>
+          <select id="speakerSelect" aria-label="話者"></select>
         </div>
         <div class="setting">
           <label for="packSize">パック</label>
@@ -45,15 +46,31 @@
           <input id="speedScale" type="number" min="0.5" max="2" step="0.05" value="1.35" />
         </div>
         <div class="setting">
+          <label for="finishMessage">終了メッセージ</label>
+          <input id="finishMessage" maxlength="80" value="時間になったのだ" />
+          <p class="field-hint">カウント終了時に読み上げます。変更後は、新しいPONVOICEを作成してください。</p>
+        </div>
+        <div class="setting">
           <label for="fileName">ファイル名</label>
-          <input id="fileName" value="poncount__voicevox__standard__v01.ponvoice" />
+          <input id="fileName" value="poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice" />
+        </div>
+      </section>
+
+      <section class="finish-card maker-finish-card" aria-labelledby="finish-guide-title">
+        <div>
+          <h2 id="finish-guide-title">終了メッセージの出力</h2>
+          <p>この欄の文言を、数え終わった直後に再生する専用クリップとして音声パックへ含めます。</p>
+        </div>
+        <div class="finish-message-stack">
+          <strong id="finishPreview">「時間になったのだ」</strong>
+          <button id="testFinishBtn">終了メッセージを試聴</button>
         </div>
       </section>
 
       <section class="counter-panel">
-        <div class="primary-actions">
+        <div class="primary-actions maker-actions">
           <button id="createBtn" class="primary">作成して保存</button>
-          <button id="testBtn">1を試聴</button>
+          <button id="testBtn">「1」を試聴</button>
           <button id="stopBtn">停止</button>
         </div>
         <progress id="progress" value="0" max="59"></progress>
@@ -61,8 +78,9 @@
       </section>
 
       <section class="notes">
-        <h2>クレジット</h2>
-        <p>VOICEVOX音声を使う場合、配布や公開の形に応じて利用規約と各キャラクターの表記を確認してください。</p>
+        <h2>作成後の流れ</h2>
+        <p>作成して保存すると、終了メッセージを含む <code>.ponvoice</code> がダウンロードされます。カウントアプリに戻り、最上部の「URLから読み込む」または「ファイルを選ぶ」から取り込んでください。</p>
+        <p class="credit">VOICEVOX音声を使う場合、配布や公開の形に応じて利用規約と各キャラクターの表記を確認してください。</p>
       </section>
     </main>
 

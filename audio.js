@@ -77,6 +77,10 @@ export class AudioStore {
     return this.buffers.has(String(key));
   }
 
+  duration(key) {
+    return this.buffers.get(String(key))?.duration ?? 0;
+  }
+
   async play(key, when = 0) {
     const source = await this.schedule(key, when);
     return Boolean(source);

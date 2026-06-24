@@ -1,10 +1,11 @@
 import { AudioStore, arrayBufferToBase64 } from "./audio.js";
-import { cueTextForSecond, cueTextsForPack } from "./count-format.js";
+import { DEFAULT_FINISH_MESSAGE, cueTextForSecond, cueTextsForPack, normalizeFinishMessage } from "./count-format.js";
 import { deleteValue, getValue, setValue } from "./db.js";
 
 const BACKGROUND_LOOKAHEAD_SECONDS = 30 * 60;
 const FOREGROUND_LOOKAHEAD_SECONDS = 8;
 const TICK_INTERVAL_MS = 80;
+const FINISH_GAP_SECONDS = 0.1;
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,8 +18,13 @@ const els = {
   resetBtn: $("resetBtn"),
   mode: $("mode"),
   targetSeconds: $("targetSeconds"),
+  targetSecondsLabel: $("targetSecondsLabel"),
+  targetSecondsHint: $("targetSecondsHint"),
   intervalSeconds: $("intervalSeconds"),
   audioSource: $("audioSource"),
+  finishMessageDisplay: $("finishMessageDisplay"),
+  finishMessageStatus: $("finishMessageStatus"),
+  testFinishBtn: $("testFinishBtn"),
   backgroundMode: $("backgroundMode"),
   backgroundStatus: $("backgroundStatus"),
   backgroundAudio: $("backgroundAudio"),
@@ -39,6 +45,7 @@ const els = {
 const audioStore = new AudioStore(els.backgroundAudio);
 const state = {
   running: false,
+  completed: false,
   startedAt: 0,
   pausedElapsed: 0,
   timerId: null,
@@ -48,6 +55,10 @@ const state = {
   nextFallbackSecond: 1,
   scheduledUntilSecond: 0,
   scheduledSources: new Set(),
+  finishScheduled: false,
+  finishPlayed: false,
+  finishSource: null,
+  finishCleanupTimer: null,
 };
 
 init();
@@ -57,6 +68,7 @@ async function init() {
   configureMediaSession();
   await restorePack();
   render();
+  updateFinishMessageUI();
   updateBackgroundStatus();
 
   if ("serviceWorker" in navigator) {
@@ -68,7 +80,10 @@ function bindEvents() {
   els.startBtn.addEventListener("click", start);
   els.pauseBtn.addEventListener("click", pause);
   els.resetBtn.addEventListener("click", reset);
-  els.mode.addEventListener("change", reset);
+  els.mode.addEventListener("change", () => {
+    reset();
+    updateTargetCopy();
+  });
   els.targetSeconds.addEventListener("change", reset);
   els.intervalSeconds.addEventListener("change", rescheduleRunningAudio);
   els.audioSource.addEventListener("change", rescheduleRunningAudio);
@@ -77,6 +92,7 @@ function bindEvents() {
   els.loadPackUrlBtn.addEventListener("click", loadPackFromUrl);
   els.clearPackBtn.addEventListener("click", clearPack);
   els.testVoiceBtn.addEventListener("click", () => playTestCue());
+  els.testFinishBtn.addEventListener("click", () => playFinishTest());
   els.connectBtn.addEventListener("click", connectVoicevox);
   els.prepareBtn.addEventListener("click", prepareVoicevoxClips);
   document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -103,6 +119,14 @@ async function restorePack() {
 async function start() {
   if (state.running) return;
 
+  if (state.completed) {
+    state.pausedElapsed = 0;
+    state.nextFallbackSecond = 1;
+    state.scheduledUntilSecond = 0;
+    state.completed = false;
+    clearFinishState();
+  }
+
   if (usesBufferedPack()) {
     try {
       await audioStore.ensureContext({
@@ -123,10 +147,12 @@ async function start() {
   setMediaSessionState("playing");
   await requestWakeLock();
   await scheduleAudioAhead();
+  render();
   tick();
 }
 
 function pause() {
+  if (!state.running) return;
   state.pausedElapsed = elapsedSeconds();
   state.running = false;
   clearTimeout(state.timerId);
@@ -140,6 +166,7 @@ function pause() {
 
 function reset() {
   state.running = false;
+  state.completed = false;
   clearTimeout(state.timerId);
   state.pausedElapsed = 0;
   state.nextFallbackSecond = 1;
@@ -158,9 +185,9 @@ function tick() {
   const elapsed = elapsedSeconds();
   const target = targetSeconds();
   const elapsedFloor = Math.floor(elapsed);
-  const visible = els.mode.value === "down" ? Math.max(0, target - elapsedFloor) : elapsedFloor;
+  const visible = visibleValue(elapsedFloor, target);
   els.countDisplay.textContent = visible;
-  els.countDisplay.setAttribute("aria-label", `${els.mode.value === "down" ? "残り" : "経過"}時間 ${visible}秒`);
+  els.countDisplay.setAttribute("aria-label", timerAriaLabel(visible));
 
   if (usesBufferedPack()) {
     scheduleAudioAhead().catch(() => {});
@@ -168,17 +195,38 @@ function tick() {
     playFallbackCues(elapsedFloor).catch(() => {});
   }
 
-  if (els.mode.value === "down" && elapsed >= target) {
-    state.running = false;
-    state.pausedElapsed = target;
-    stopScheduledAudio();
-    setMediaSessionState("none");
-    render();
-    updateBackgroundStatus("カウントダウンが完了しました。");
+  if (elapsed >= target) {
+    completeCount();
     return;
   }
 
   state.timerId = setTimeout(tick, TICK_INTERVAL_MS);
+}
+
+function completeCount() {
+  if (state.completed) return;
+
+  state.running = false;
+  state.completed = true;
+  state.pausedElapsed = targetSeconds();
+  clearTimeout(state.timerId);
+  releaseWakeLock();
+  render();
+
+  const message = finishMessageText();
+  if (usesBufferedPack() && state.finishScheduled) {
+    updateBackgroundStatus(`終了しました。${message} を読み上げます。`);
+    setMediaSessionState("playing");
+    if (state.finishPlayed) finishPlaybackAfterMessage();
+    return;
+  }
+
+  // 旧パックなど、終了メッセージを含まない場合の保険。
+  // 画面表示中はブラウザ音声 / ローカルVOICEVOXで読むことがありますが、
+  // iPhoneバックグラウンドで確実に鳴らすには新しいPONVOICEが必要です。
+  speakCueNow(message).catch(() => {});
+  updateBackgroundStatus(`終了しました。${message} を読み上げました。`);
+  deferFinishPlayback(2200);
 }
 
 function elapsedSeconds() {
@@ -193,9 +241,7 @@ async function scheduleAudioAhead() {
   const elapsedFloor = Math.floor(elapsed);
   const target = targetSeconds();
   const horizon = els.backgroundMode.checked ? BACKGROUND_LOOKAHEAD_SECONDS : FOREGROUND_LOOKAHEAD_SECONDS;
-  const lastSecond = els.mode.value === "down"
-    ? Math.min(target, elapsedFloor + horizon)
-    : elapsedFloor + horizon;
+  const lastSecond = Math.min(target, elapsedFloor + horizon);
 
   if (state.scheduledUntilSecond < elapsedFloor) {
     state.scheduledUntilSecond = elapsedFloor;
@@ -205,7 +251,7 @@ async function scheduleAudioAhead() {
   const scheduleFromElapsed = elapsed;
 
   for (let second = state.scheduledUntilSecond + 1; second <= lastSecond; second += 1) {
-    const countValue = els.mode.value === "down" ? Math.max(0, target - second) : second;
+    const countValue = countValueAtSecond(second, target);
     if (!shouldSpeak(second, countValue)) continue;
 
     const text = cueTextForSecond(countValue);
@@ -214,13 +260,54 @@ async function scheduleAudioAhead() {
     const when = contextNow + Math.max(0.05, second - scheduleFromElapsed);
     const source = await audioStore.schedule(text, when);
     if (!source) continue;
-
-    state.scheduledSources.add(source);
-    source.addEventListener("ended", () => state.scheduledSources.delete(source), { once: true });
+    rememberScheduledSource(source);
   }
 
   state.scheduledUntilSecond = lastSecond;
+
+  if (lastSecond >= target) {
+    await scheduleFinishMessage(contextNow, scheduleFromElapsed, target);
+  }
+
   updateBackgroundStatus();
+}
+
+async function scheduleFinishMessage(contextNow, scheduleFromElapsed, target) {
+  if (state.finishScheduled || state.finishPlayed) return;
+
+  const message = finishMessageText();
+  if (!audioStore.has(message)) return;
+
+  const finalCountValue = countValueAtSecond(target, target);
+  const finalCountText = shouldSpeak(target, finalCountValue) ? cueTextForSecond(finalCountValue) : null;
+  const finalCountDuration = finalCountText && audioStore.has(finalCountText)
+    ? audioStore.duration(finalCountText)
+    : 0;
+  const finishWhen = contextNow
+    + Math.max(0.05, target - scheduleFromElapsed)
+    + finalCountDuration
+    + FINISH_GAP_SECONDS;
+
+  const source = await audioStore.schedule(message, finishWhen);
+  if (!source) return;
+
+  state.finishScheduled = true;
+  state.finishSource = source;
+  rememberScheduledSource(source, true);
+}
+
+function rememberScheduledSource(source, isFinishMessage = false) {
+  state.scheduledSources.add(source);
+  source.addEventListener("ended", () => {
+    state.scheduledSources.delete(source);
+    if (!isFinishMessage) return;
+
+    state.finishPlayed = true;
+    state.finishSource = null;
+    if (state.completed && !state.running) {
+      finishPlaybackAfterMessage();
+    }
+  }, { once: true });
 }
 
 async function playFallbackCues(elapsedFloor) {
@@ -228,11 +315,9 @@ async function playFallbackCues(elapsedFloor) {
     state.nextFallbackSecond = elapsedFloor;
   }
 
-  while (state.nextFallbackSecond <= elapsedFloor) {
-    const target = targetSeconds();
-    const countValue = els.mode.value === "down"
-      ? Math.max(0, target - state.nextFallbackSecond)
-      : state.nextFallbackSecond;
+  const target = targetSeconds();
+  while (state.nextFallbackSecond <= Math.min(elapsedFloor, target)) {
+    const countValue = countValueAtSecond(state.nextFallbackSecond, target);
     if (shouldSpeak(state.nextFallbackSecond, countValue)) {
       await speakCueNow(cueTextForSecond(countValue));
     }
@@ -241,10 +326,24 @@ async function playFallbackCues(elapsedFloor) {
 }
 
 function stopScheduledAudio() {
+  clearTimeout(state.finishCleanupTimer);
+  state.finishCleanupTimer = null;
+  state.finishSource = null;
+  state.finishScheduled = false;
+  state.finishPlayed = false;
+
   for (const source of state.scheduledSources) {
     try { source.stop(); } catch { /* already ended */ }
   }
   state.scheduledSources.clear();
+}
+
+function clearFinishState() {
+  clearTimeout(state.finishCleanupTimer);
+  state.finishCleanupTimer = null;
+  state.finishScheduled = false;
+  state.finishPlayed = false;
+  state.finishSource = null;
 }
 
 async function handleVisibilityChange() {
@@ -268,9 +367,9 @@ async function rescheduleRunningAudio() {
 
 function usesBufferedPack() {
   return (
-    (els.audioSource.value === "pack" || els.audioSource.value === "voicevox") &&
-    Boolean(state.pack) &&
-    audioStore.buffers.size > 0
+    (els.audioSource.value === "pack" || els.audioSource.value === "voicevox")
+    && Boolean(state.pack)
+    && audioStore.buffers.size > 0
   );
 }
 
@@ -286,6 +385,18 @@ async function playTestCue() {
     return;
   }
   await speakCueNow("1");
+}
+
+async function playFinishTest() {
+  const message = finishMessageText();
+  if (usesBufferedPack()) {
+    await audioStore.ensureContext({ resume: true, preferMediaElement: Boolean(els.backgroundMode.checked) });
+    if (audioStore.has(message)) {
+      await audioStore.play(message);
+      return;
+    }
+  }
+  await speakCueNow(message);
 }
 
 async function speakCueNow(text) {
@@ -361,6 +472,7 @@ async function saveLoadedPack(pack) {
   await setValue("pack", pack);
   await audioStore.loadPack(pack);
   els.audioSource.value = "pack";
+  updateFinishMessageUI();
   updateBackgroundStatus();
 }
 
@@ -370,6 +482,7 @@ async function clearPack() {
   audioStore.buffers.clear();
   await deleteValue("pack");
   els.packStatus.textContent = "音声パックは未読込です。上の「URLから読み込む」から開始できます。";
+  updateFinishMessageUI();
   updateBackgroundStatus();
 }
 
@@ -407,10 +520,17 @@ function fillSpeakerSelect(speakers) {
   }
 }
 
+function selectedVoicevoxCredit() {
+  const label = els.speakerSelect.selectedOptions[0]?.textContent ?? "";
+  const speakerName = label.split(" /")[0].trim();
+  return speakerName ? `VOICEVOX: ${speakerName}` : "VOICEVOX";
+}
+
 async function prepareVoicevoxClips() {
   if (!els.speakerSelect.value && !(await connectVoicevox())) return;
   const clips = {};
-  const cueTexts = cueTextsForPack("standard");
+  const finish = DEFAULT_FINISH_MESSAGE;
+  const cueTexts = cueTextsForPack("standard", finish);
   els.prepareProgress.max = cueTexts.length;
   els.prepareProgress.value = 0;
 
@@ -423,28 +543,33 @@ async function prepareVoicevoxClips() {
 
   const pack = {
     kind: "ponvoice",
-    version: 1,
+    version: 2,
     meta: {
       name: "VOICEVOX count standard",
       createdAt: new Date().toISOString(),
       speakerStyleId: Number(els.speakerSelect.value),
-      credit: "VOICEVOX",
+      finishMessage: finish,
+      credit: selectedVoicevoxCredit(),
     },
     clips,
   };
 
   await saveLoadedPack(pack);
   els.audioSource.value = "voicevox";
-  els.packStatus.textContent = "VOICEVOXの標準音声を準備しました。開始できます。";
+  els.packStatus.textContent = `VOICEVOXの標準音声と、終了メッセージ「${finish}」を準備しました。開始できます。`;
 }
 
 async function synthesizeAndCache(text) {
   const buffer = await synthesizeVoicevox(String(text), Number(els.speakerSelect.value));
   await audioStore.decodeClip(text, buffer);
-  const pack = state.pack ?? { kind: "ponvoice", version: 1, meta: { name: "local cache" }, clips: {} };
+  const pack = state.pack ?? { kind: "ponvoice", version: 2, meta: { name: "local cache" }, clips: {} };
   pack.clips[String(text)] = arrayBufferToBase64(buffer);
+  if (String(text) === finishMessageText()) {
+    pack.meta.finishMessage = String(text);
+  }
   state.pack = pack;
   await setValue("pack", pack);
+  updateFinishMessageUI();
   return true;
 }
 
@@ -472,20 +597,74 @@ function cleanEngineUrl() {
 
 function render() {
   const target = targetSeconds();
-  const elapsed = Math.floor(elapsedSeconds());
-  const visible = els.mode.value === "down" ? Math.max(0, target - elapsed) : elapsed;
+  const elapsed = Math.min(Math.floor(elapsedSeconds()), target);
+  const visible = visibleValue(elapsed, target);
   els.modeLabel.textContent = els.mode.value === "down" ? "カウントダウン" : "カウントアップ";
   els.unitLabel.textContent = "秒";
   els.countDisplay.textContent = visible;
-  els.countDisplay.setAttribute("aria-label", `${els.mode.value === "down" ? "残り" : "経過"}時間 ${visible}秒`);
+  els.countDisplay.setAttribute("aria-label", timerAriaLabel(visible));
+  els.startBtn.textContent = state.completed ? "もう一度開始" : state.pausedElapsed > 0 ? "再開" : "開始";
+  updateTargetCopy();
 }
 
 function targetSeconds() {
   return clamp(Number(els.targetSeconds.value) || 60, 1, 86400);
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+function countValueAtSecond(second, target) {
+  return els.mode.value === "down" ? Math.max(0, target - second) : Math.min(target, second);
+}
+
+function visibleValue(elapsed, target) {
+  return els.mode.value === "down" ? Math.max(0, target - elapsed) : Math.min(target, elapsed);
+}
+
+function timerAriaLabel(value) {
+  return `${els.mode.value === "down" ? "残り" : "経過"}時間 ${value}秒`;
+}
+
+function updateTargetCopy() {
+  const duration = formatDuration(targetSeconds());
+  if (els.mode.value === "up") {
+    els.targetSecondsLabel.textContent = "終了まで（秒）";
+    els.targetSecondsHint.textContent = `カウントアップも ${duration} で自動終了します。例：300秒 = 5分`;
+  } else {
+    els.targetSecondsLabel.textContent = "開始時間（秒）";
+    els.targetSecondsHint.textContent = `カウントダウンは ${duration} から開始し、0秒で終了します。`;
+  }
+}
+
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remain = seconds % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours}時間`);
+  if (minutes) parts.push(`${minutes}分`);
+  if (remain || parts.length === 0) parts.push(`${remain}秒`);
+  return parts.join("");
+}
+
+function finishMessageText() {
+  return normalizeFinishMessage(state.pack?.meta?.finishMessage ?? DEFAULT_FINISH_MESSAGE);
+}
+
+function updateFinishMessageUI() {
+  const message = finishMessageText();
+  els.finishMessageDisplay.textContent = `「${message}」`;
+
+  if (!state.pack) {
+    els.finishMessageStatus.textContent = "標準の終了メッセージです。音声パックを読み込むと、バックグラウンド再生用の音声を確認できます。";
+    return;
+  }
+
+  if (audioStore.has(message)) {
+    els.finishMessageStatus.textContent = "この音声パックには、終了メッセージの音声が入っています。終了時に予約再生します。";
+    return;
+  }
+
+  els.finishMessageStatus.textContent = "この音声パックには終了メッセージが入っていません。VOICEVOXで新しいPONVOICEを作ると、iPhoneのバックグラウンドでも予約再生できます。";
 }
 
 async function requestWakeLock() {
@@ -535,6 +714,20 @@ function setMediaSessionState(value) {
   try { navigator.mediaSession.playbackState = value; } catch { /* optional */ }
 }
 
+function deferFinishPlayback(delayMs) {
+  clearTimeout(state.finishCleanupTimer);
+  state.finishCleanupTimer = setTimeout(() => finishPlaybackAfterMessage(), delayMs);
+}
+
+function finishPlaybackAfterMessage() {
+  if (state.running || !state.completed) return;
+  clearTimeout(state.finishCleanupTimer);
+  state.finishCleanupTimer = null;
+  audioStore.pauseMediaBridge();
+  setMediaSessionState("none");
+  updateBackgroundStatus(`終了しました。${finishMessageText()} を読み上げました。`);
+}
+
 function updateBackgroundStatus(message = "") {
   if (message) {
     els.backgroundStatus.textContent = message;
@@ -546,6 +739,11 @@ function updateBackgroundStatus(message = "") {
     return;
   }
 
+  if (!hasFinishAudio()) {
+    els.backgroundStatus.textContent = "このパックには終了メッセージがありません。VOICEVOXで新しいPONVOICEを作ると、終了時も予約再生できます。";
+    return;
+  }
+
   if (!els.backgroundMode.checked) {
     els.backgroundStatus.textContent = "通常モードです。画面表示中の再生を優先します。";
     return;
@@ -554,9 +752,17 @@ function updateBackgroundStatus(message = "") {
   const sessionReady = "audioSession" in navigator;
   const bridgeReady = audioStore.usingMediaBridge;
   if (state.running) {
-    els.backgroundStatus.textContent = `${sessionReady ? "再生セッションを設定し、" : "再生セッション非対応のため、"}${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約中です${bridgeReady ? "。" : "（端末側のメディア再生を利用できない場合があります）。"}`;
+    els.backgroundStatus.textContent = `${sessionReady ? "再生セッションを設定し、" : "再生セッション非対応のため、"}${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声と終了メッセージを予約中です${bridgeReady ? "。" : "（端末側のメディア再生を利用できない場合があります）。"}`;
     return;
   }
 
-  els.backgroundStatus.textContent = `開始時に${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約します。iPhoneではホーム画面追加版で試してください。`;
+  els.backgroundStatus.textContent = `開始時に${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約します。終了時は「${finishMessageText()}」を読み上げます。`;
+}
+
+function hasFinishAudio() {
+  return Boolean(state.pack) && audioStore.has(finishMessageText());
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
