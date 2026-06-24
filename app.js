@@ -592,7 +592,8 @@ async function fetchJson(url, options) {
 }
 
 function cleanEngineUrl() {
-  return els.engineUrl.value.replace(/\/$/, "");
+  const raw = els.engineUrl.value.trim() || "./voicevox";
+  return new URL(raw, location.href).href.replace(/\/$/, "");
 }
 
 function render() {

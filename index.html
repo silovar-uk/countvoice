@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="毎秒カウント" />
     <title>毎秒カウント</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
   </head>
   <body>
     <main class="app-shell">
@@ -132,7 +132,7 @@
           <p id="voicevoxStatus">PCでVOICEVOX Engineを起動してから接続します。</p>
         </div>
         <div class="voicevox-row">
-          <input id="engineUrl" type="url" value="http://127.0.0.1:50021" aria-label="VOICEVOX Engine URL" />
+          <input id="engineUrl" type="url" value="./voicevox" aria-label="VOICEVOX Engine URL" />
           <button id="connectBtn">接続</button>
         </div>
         <div class="voicevox-row">
@@ -152,6 +152,6 @@
     </main>
 
     <audio id="backgroundAudio" playsinline preload="auto" aria-hidden="true"></audio>
-    <script src="./app.js" type="module"></script>
+    <script src="./app.js?v=12" type="module"></script>
   </body>
 </html>

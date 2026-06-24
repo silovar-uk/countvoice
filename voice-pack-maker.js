@@ -18,12 +18,15 @@ const els = {
   progress: $("progress"),
   progressText: $("progressText"),
   status: $("status"),
+  diagnoseBtn: $("diagnoseBtn"),
+  diagnosticOutput: $("diagnosticOutput"),
 };
 
 let abort = false;
 let audio = new Audio();
 
 els.connectBtn.addEventListener("click", connect);
+els.diagnoseBtn.addEventListener("click", diagnoseConnection);
 els.createBtn.addEventListener("click", createPack);
 els.testBtn.addEventListener("click", () => testVoice("1"));
 els.testFinishBtn.addEventListener("click", () => testVoice(finishMessage()));
@@ -39,6 +42,8 @@ els.finishMessage.addEventListener("input", () => {
 
 renderFinishPreview();
 updateMax();
+renderOriginHint();
+if (new URLSearchParams(location.search).has("diagnose")) diagnoseConnection();
 
 async function connect() {
   els.status.textContent = "接続中...";
@@ -54,12 +59,94 @@ async function connect() {
         els.speakerSelect.append(option);
       }
     }
-    els.status.textContent = "接続しました。話者を選べます。";
+    els.status.textContent = `接続しました。${speakers.length}人分の話者情報を読み込みました。`;
+    els.diagnosticOutput.textContent = `接続成功
+ページ: ${currentOriginLabel()}
+Engine: ${baseUrl()}
+話者: ${speakers.length}人`;
     return true;
-  } catch {
-    els.status.textContent = "接続できませんでした。VOICEVOX Engineを起動してください。";
+  } catch (error) {
+    els.status.textContent = connectionFailureMessage(error);
+    els.diagnosticOutput.textContent = diagnosticFailureDetail(error);
     return false;
   }
+}
+
+function renderOriginHint() {
+  const origin = currentOriginLabel();
+  const local = isLocalPage();
+  els.diagnosticOutput.textContent = `${local ? "ローカル作成モードです。接続診断を押してください。" : "このページは公開URLまたはfile://で開かれています。VOICEVOX接続はローカル作成モードを使ってください。"}
+ページ: ${origin}
+Engine: ${baseUrl()}`;
+}
+
+async function diagnoseConnection() {
+  const local = isLocalPage();
+  els.diagnosticOutput.textContent = `診断中...
+ページ: ${currentOriginLabel()}
+Engine: ${baseUrl()}`;
+
+  if (!local) {
+    els.diagnosticOutput.textContent = [
+      "この画面はPCローカルで開かれていません。",
+      `現在のページ: ${currentOriginLabel()}`,
+      "公開URL・スマホ・file:// からVOICEVOXへ接続すると、CORSまたはブラウザ制限で失敗しやすくなります。",
+      "対処: このフォルダ内の START_HERE.bat をダブルクリックし、",
+      "自動で開いた http://127.0.0.1:8786/voice-pack-maker.html で接続してください。",
+    ].join("\n");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl()}/speakers`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const speakers = await response.json();
+    els.diagnosticOutput.textContent = [
+      "接続診断: 成功",
+      `ページ: ${currentOriginLabel()}`,
+      `Engine: ${baseUrl()}`,
+      `話者情報: ${speakers.length}人分を取得`,
+      "このまま「接続」を押してください。",
+    ].join("\n");
+  } catch (error) {
+    els.diagnosticOutput.textContent = diagnosticFailureDetail(error);
+  }
+}
+
+function currentOriginLabel() {
+  return location.origin === "null" ? "file://（直接開き）" : location.origin;
+}
+
+function isLocalPage() {
+  return location.protocol !== "file:" && ["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+}
+
+function connectionFailureMessage(error) {
+  if (!isLocalPage()) {
+    return "接続できません。公開URLやfile://ではなく、start-voice-pack-maker.batで開いたPCローカル画面から接続してください。";
+  }
+  return `接続できません。VOICEVOX API（${baseUrl()}）へ到達できませんでした。接続診断で詳細を確認してください。`;
+}
+
+function diagnosticFailureDetail(error) {
+  const message = error?.message || String(error);
+  if (!isLocalPage()) {
+    return [
+      "接続診断: ページの開き方が原因です。",
+      `現在のページ: ${currentOriginLabel()}`,
+      "VOICEVOXは外部サイトからの接続を初期状態では拒否します。",
+      "このフォルダの start-voice-pack-maker.bat をダブルクリックして、",
+      "http://127.0.0.1:8786/voice-pack-maker.html を開いてください。",
+      `参考エラー: ${message}`,
+    ].join("\n");
+  }
+  return [
+    "接続診断: VOICEVOX Engineへ到達できません。",
+    `ページ: ${currentOriginLabel()}`,
+    `接続先: ${baseUrl()}`,
+    `ブラウザのエラー: ${message}`,
+    "確認: ① http://127.0.0.1:50021/docs が開くか ② VOICEVOXを完全に再起動 ③ Windowsファイアウォールの許可", 
+  ].join("\n");
 }
 
 async function createPack() {
@@ -168,7 +255,8 @@ function updateMax() {
 }
 
 function baseUrl() {
-  return els.engineUrl.value.replace(/\/$/, "");
+  const raw = els.engineUrl.value.trim() || "./voicevox";
+  return new URL(raw, location.href).href.replace(/\/$/, "");
 }
 
 async function fetchJson(url, options) {

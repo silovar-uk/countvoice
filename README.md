@@ -1,58 +1,44 @@
-# CountVoice v11
+# CountVoice v16 - PowerShell launcher (no Python)
 
-VOICEVOXで事前生成した `.ponvoice` 音声パックを使って、毎秒カウントするWebアプリです。
+This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
-## 今回の変更
+This version does **not** use Python. It uses the Windows built-in PowerShell HTTP server/proxy.
 
-- **カウントアップも、設定した「終了まで（秒）」で自動終了**
-- 終了時に、音声パックへ入れたメッセージ（初期値：`時間になったのだ`）を読み上げ
-- 終了メッセージを音声パック作成ツールで入力・試聴・書き出し可能に変更
-- 終了メッセージも開始時に予約するため、対応iPhoneではバックグラウンド時も再生を試みる
-- 既存の旧PONVOICEに終了メッセージが入っていない場合は、画面内で作り直しを案内
+## How to start
 
-## カウントアップの使い方
+1. Extract the ZIP fully.
+2. Start VOICEVOX and wait until its main window finishes loading.
+3. Double-click `START_HERE.bat`.
+4. Keep the black window open.
+5. A browser opens this local page:
 
-1. 最上部の **「URLから読み込む」** で音声パックを読み込む
-2. モードを **「カウントアップ」** にする
-3. **「終了まで（秒）」** に終了したい時間を入力する
-   - `10` = 10秒
-   - `60` = 1分
-   - `300` = 5分
-   - `1800` = 30分
-4. 「開始」を押す
-5. 指定秒数に達すると停止し、`時間になったのだ` を読み上げる
-
-## 終了メッセージ入りPONVOICEの作り方
-
-スマホのバックグラウンドでも終了メッセージを鳴らしたい場合は、終了メッセージを含めた新しいPONVOICEを作ってください。
-
-1. PCでVOICEVOXを起動する
-2. `voice-pack-maker.html` を開く
-3. `http://127.0.0.1:50021` に接続する
-4. 話者・パック・読み上げ速度を選ぶ
-5. **「終了メッセージ」** に `時間になったのだ` を入力する
-6. **「終了メッセージを試聴」** で確認する
-7. **「作成して保存」** を押す
-8. 新しく作られた `.ponvoice` をカウントアプリへ読み込む
-
-作成ツールは、秒読み・分読み・時間読みとあわせて、終了メッセージを1つのPONVOICEへ保存します。終了メッセージを変えたいときは、同じ手順で新しいパックを作り直してください。
-
-## iPhoneバックグラウンド再生について
-
-この版は、Webで取りうる改善策を入れています。ただし、iOSは電話・他アプリの音声・省電力・Safari/PWAの実装差でWebアプリの実行や音声を中断する場合があります。**Webアプリとして無制限・完全保証のバックグラウンド読み上げはできません。**
-
-特に長時間使う場合は、まず5〜10分で動作を確認してください。より確実な無制限バックグラウンド再生が必要な場合は、ネイティブiOSアプリ化が必要です。
-
-## ローカルで起動する
-
-PowerShellでこのフォルダを開き、次を実行します。
-
-```powershell
-.\start-server.ps1
+```text
+http://127.0.0.1:8786/voice-pack-maker.html?diagnose=1
 ```
 
-その後、ブラウザで `http://127.0.0.1:8765/index.html` を開きます。
+6. Confirm that the on-page diagnostic says success, then press `接続`.
 
-## 注意
+## If it fails
 
-VOICEVOX音声を使う場合は、VOICEVOX本体と各音声ライブラリの利用規約を確認してください。公開や配布をする場合、必要なクレジット表記を入れてください。
+Double-click `TEST_VOICEVOX.bat`.
+
+- `RESULT: OK` means VOICEVOX itself is ready. Then run `START_HERE.bat` again.
+- `RESULT: FAIL` means Windows cannot reach the VOICEVOX Engine. Open this in the same PC browser:
+
+```text
+http://127.0.0.1:50021/docs
+```
+
+Do not use the public GitHub Pages URL or your iPhone to create a VOICEVOX pack. The voice-pack maker must run in the local PC page opened by `START_HERE.bat`.
+
+## Why this works
+
+The local PowerShell server serves the page at `127.0.0.1:8786` and proxies `/voicevox/...` requests to `127.0.0.1:50021`. This avoids normal browser CORS trouble without requiring Python.
+
+## Finish message
+
+When creating a `.ponvoice`, use the finish message `時間になったのだ` or replace it with your own phrase. The created pack contains that audio clip.
+
+## v16 fix
+
+If v15 opened a browser page showing `Forbidden`, the local server itself was running but its static-file path check was too strict. v16 corrects that path handling.

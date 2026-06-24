@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#101316" />
     <title>音声パック作成</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
   </head>
   <body>
     <main class="app-shell">
@@ -17,13 +17,38 @@
         <a class="tool-link" href="./index.html">カウントへ戻る</a>
       </header>
 
+      <section class="local-start-card" aria-labelledby="local-start-title">
+        <div>
+          <p class="step-kicker">最初にここ</p>
+          <h2 id="local-start-title">PCローカルで作成ツールを開く</h2>
+          <p><strong>VOICEVOXへ接続するのは、公開サイトやスマホではなくPC上のローカル画面からです。</strong>このフォルダ内の <code>start-voice-pack-maker.bat</code> をダブルクリックすると、接続確認後にこの画面が自動で開きます。</p>
+        </div>
+        <ol class="local-start-steps">
+          <li><span>1</span> VOICEVOXを起動</li>
+          <li><span>2</span> <code>start-voice-pack-maker.bat</code> を実行</li>
+          <li><span>3</span> 自動で開いた画面で接続</li>
+        </ol>
+      </section>
+
+      <section class="diagnostic-card" aria-labelledby="diagnostic-title">
+        <div>
+          <h2 id="diagnostic-title">接続診断</h2>
+          <p>接続できないときは、ここで「ページの開き方」と「VOICEVOX Engineへの到達」を確認します。</p>
+        </div>
+        <div class="diagnostic-actions">
+          <button id="diagnoseBtn" type="button">接続を診断する</button>
+          <a class="text-link" href="http://127.0.0.1:50021/docs" target="_blank" rel="noreferrer">VOICEVOX APIを開く</a>
+        </div>
+        <pre id="diagnosticOutput" class="diagnostic-output" aria-live="polite">未診断です。</pre>
+      </section>
+
       <section class="voice-card">
         <div>
-          <h2>接続</h2>
-          <p id="status">VOICEVOXを起動してから接続してください。</p>
+          <h2>VOICEVOXへ接続</h2>
+          <p id="status">PCローカル画面で「接続」を押してください。</p>
         </div>
         <div class="voicevox-row">
-          <input id="engineUrl" type="url" value="http://127.0.0.1:50021" aria-label="VOICEVOX Engine URL" />
+          <input id="engineUrl" type="url" value="./voicevox" aria-label="VOICEVOX 接続先（ローカル起動では自動プロキシ）" />
           <button id="connectBtn">接続</button>
         </div>
       </section>
@@ -84,6 +109,6 @@
       </section>
     </main>
 
-    <script type="module" src="./voice-pack-maker.js"></script>
+    <script type="module" src="./voice-pack-maker.js?v=12"></script>
   </body>
 </html>
