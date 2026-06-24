@@ -1,4 +1,4 @@
-# CountVoice v16 - PowerShell launcher (no Python)
+# CountVoice v18 - green clock icons + finish-message pack URL
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -42,3 +42,27 @@ When creating a `.ponvoice`, use the finish message `時間になったのだ` o
 ## v16 fix
 
 If v15 opened a browser page showing `Forbidden`, the local server itself was running but its static-file path check was too strict. v16 corrects that path handling.
+
+
+
+## Default audio-pack URL
+
+The top "URLから音声パックを読み込む" field now defaults to:
+
+```text
+./packs/poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice
+```
+
+Create this file with `voice-pack-maker.html` and place it in the `packs` folder before deploying to GitHub Pages. It must include the finish message `時間になったのだ`. The older v01 pack is intentionally not renamed because it does not contain that finish-message audio.
+
+## App icons
+
+A green clock icon set based on `icons/icon-source-green-clock.png` is included.
+
+- `favicon.ico`: browser / Windows favicon
+- `icons/favicon-16x16.png`, `icons/favicon-32x32.png`, `icons/favicon-48x48.png`, `icons/favicon-64x64.png`: browser variants
+- `icons/apple-touch-icon.png`: iPhone home-screen icon
+- `icons/icon-192.png`, `icons/icon-512.png`: PWA icons
+- `icons/icon-512-maskable.png`: Android maskable PWA icon
+
+After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shift + R`) or remove and re-add the iPhone home-screen shortcut if the old icon remains.

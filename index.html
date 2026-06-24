@@ -3,12 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101316" />
+    <meta name="theme-color" content="#2ab14c" />
+    <meta name="msapplication-TileColor" content="#2ab14c" />
+    <meta name="msapplication-TileImage" content="./icons/icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="毎秒カウント" />
     <title>毎秒カウント</title>
     <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="./styles.css?v=12" />
   </head>
   <body>
@@ -26,12 +32,12 @@
           <span class="step-kicker">最初にここ</span>
           <div>
             <h2 id="quick-load-title">URLから音声パックを読み込む</h2>
-            <p>標準パックを先に読み込むと、iPhone向けの毎秒読み上げを使えます。</p>
+            <p>終了メッセージ入りの音声パックを先に読み込むと、iPhone向けの毎秒読み上げを使えます。</p>
           </div>
         </div>
         <div class="quick-load-row">
           <label class="sr-only" for="packUrl">音声パックURL</label>
-          <input id="packUrl" type="url" value="./packs/poncount__zundamon-normal__standard__1.35__20260624__v01.ponvoice" aria-label="音声パックURL" />
+          <input id="packUrl" type="url" value="./packs/poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice" aria-label="音声パックURL" />
           <button id="loadPackUrlBtn" class="primary quick-load-button">URLから読み込む</button>
         </div>
         <p id="packStatus" class="quick-load-status" role="status">まだ音声パックを読み込んでいません。まずは上のボタンを押してください。</p>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v12";
+const CACHE_NAME = "count-voice-app-v18-icons-packurl";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,8 +10,18 @@ const ASSETS = [
   "./db.js",
   "./voice-pack-maker.js",
   "./manifest.webmanifest",
+  "./favicon.ico",
   "./icon.svg",
-  "./packs/poncount__zundamon-normal__standard__1.35__20260624__v01.ponvoice"
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-512-maskable.png",
+  "./icons/apple-touch-icon.png",
+  "./icons/apple-touch-icon-152.png",
+  "./icons/apple-touch-icon-120.png",
+  "./icons/favicon-64x64.png",
+  "./icons/favicon-48x48.png",
+  "./icons/favicon-32x32.png",
+  "./icons/favicon-16x16.png",
 ];
 
 self.addEventListener("install", (event) => {
