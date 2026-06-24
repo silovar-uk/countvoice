@@ -1,7 +1,9 @@
 {
+  "id": "./index.html",
   "name": "毎秒カウント",
   "short_name": "CountVoice",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#101316",
   "theme_color": "#101316",
@@ -9,7 +11,8 @@
     {
       "src": "./icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v7";
+const CACHE_NAME = "count-voice-app-v10";
 const ASSETS = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const ASSETS = [
   "./voice-pack-maker.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./packs/poncount__zundamon-normal__standard__1.35__20260624__v01.ponvoice"
 ];
 
 self.addEventListener("install", (event) => {

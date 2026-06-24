@@ -6,9 +6,10 @@
     <meta name="theme-color" content="#101316" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="毎秒カウント" />
     <title>毎秒カウント</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=5" />
-    <link rel="stylesheet" href="./styles.css?v=5" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app-shell">
@@ -20,10 +21,26 @@
         <a class="tool-link" href="./voice-pack-maker.html">音声パック作成</a>
       </header>
 
+      <section class="quick-load-card" aria-labelledby="quick-load-title">
+        <div class="quick-load-heading">
+          <span class="step-kicker">最初にここ</span>
+          <div>
+            <h2 id="quick-load-title">URLから音声パックを読み込む</h2>
+            <p>標準パックを先に読み込むと、iPhone向けの毎秒読み上げを使えます。</p>
+          </div>
+        </div>
+        <div class="quick-load-row">
+          <label class="sr-only" for="packUrl">音声パックURL</label>
+          <input id="packUrl" type="url" value="./packs/poncount__zundamon-normal__standard__1.35__20260624__v01.ponvoice" aria-label="音声パックURL" />
+          <button id="loadPackUrlBtn" class="primary quick-load-button">URLから読み込む</button>
+        </div>
+        <p id="packStatus" class="quick-load-status" role="status">まだ音声パックを読み込んでいません。まずは上のボタンを押してください。</p>
+      </section>
+
       <section class="counter-panel" aria-label="カウント操作">
-        <div class="readout">
+        <div class="readout" aria-live="off">
           <span id="modeLabel">カウントアップ</span>
-          <strong id="countDisplay">0</strong>
+          <strong id="countDisplay" role="timer" aria-label="経過時間 0秒">0</strong>
           <span id="unitLabel">秒</span>
         </div>
 
@@ -32,6 +49,17 @@
           <button id="pauseBtn">一時停止</button>
           <button id="resetBtn">リセット</button>
         </div>
+      </section>
+
+      <section class="background-card" aria-labelledby="background-title">
+        <div>
+          <h2 id="background-title">iPhone バックグラウンド音声</h2>
+          <p id="backgroundStatus">音声パックを読み込んだ後、開始すると30分先まで音声を予約します。</p>
+        </div>
+        <label class="toggle-row" for="backgroundMode">
+          <input id="backgroundMode" type="checkbox" checked />
+          <span>バックグラウンド優先</span>
+        </label>
       </section>
 
       <section class="settings-grid" aria-label="設定">
@@ -69,20 +97,16 @@
         </div>
       </section>
 
-      <section class="voice-card" aria-label="音声パック">
+      <section class="voice-card" aria-label="音声パックの管理">
         <div>
-          <h2>音声パック</h2>
-          <p id="packStatus">音声パックは未読込です。VOICEVOXで作った .ponvoice を取り込めます。</p>
+          <h2>ファイルから音声パックを取り込む</h2>
+          <p>URLではなく、手元にある <code>.ponvoice</code> を使う場合はこちらです。</p>
         </div>
         <div class="file-row">
-          <label class="file-button" for="packInput">取り込む</label>
-          <input id="packInput" type="file" />
+          <label class="file-button" for="packInput">ファイルを選ぶ</label>
+          <input id="packInput" type="file" accept=".ponvoice,application/json" />
           <button id="clearPackBtn">削除</button>
           <button id="testVoiceBtn">試聴</button>
-        </div>
-        <div class="url-row">
-          <input id="packUrl" type="url" value="./packs/poncount__zundamon-normal__standard__1.35__20260624__v01.ponvoice" aria-label="音声パックURL" />
-          <button id="loadPackUrlBtn">URLから読込</button>
         </div>
       </section>
 
@@ -103,12 +127,14 @@
       </section>
 
       <section class="notes">
-        <h2>使い方</h2>
-        <p>安定した毎秒カウントのため、音声は先に作って保存します。スマホでは音声パックを取り込む方式が一番安定します。</p>
+        <h2>使い方と注意</h2>
+        <p>iPhoneでは、音声パックを先に読み込み、アプリをホーム画面へ追加してから使うのがおすすめです。開始後は、画面ロック前に数秒再生されていることを確認してください。</p>
+        <p>バックグラウンド優先は、対応端末で音声セッションを「再生」として扱い、音声パックを30分先まで予約する実装です。電話・他アプリの音声・省電力設定などで止まる場合があります。</p>
         <p class="credit">VOICEVOXを使う場合は、公開や配布時に各音声ライブラリの利用規約を確認し、必要なクレジットを表示してください。</p>
       </section>
     </main>
 
-    <script src="./app.js?v=8" type="module"></script>
+    <audio id="backgroundAudio" playsinline preload="auto" aria-hidden="true"></audio>
+    <script src="./app.js" type="module"></script>
   </body>
 </html>
