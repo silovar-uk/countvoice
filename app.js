@@ -8,6 +8,7 @@ const TICK_INTERVAL_MS = 80;
 const FINISH_GAP_SECONDS = 0.18;
 const FINISH_REPEAT_GAP_SECONDS = 0.42;
 const FINISH_PLAY_COUNT = 2;
+const DEFAULT_APP_VOLUME_PERCENT = 50;
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,7 +79,7 @@ const state = {
   audioNeedsRecovery: false,
   audioRecoveryInFlight: false,
   audioReschedulePromise: null,
-  volume: 1,
+  volume: DEFAULT_APP_VOLUME_PERCENT / 100,
   volumeSaveTimer: null,
 };
 
@@ -132,7 +133,8 @@ function bindEvents() {
 
 async function restoreVolume() {
   const stored = await getValue("appVolume").catch(() => null);
-  const percent = Number.isFinite(Number(stored)) ? Number(stored) : Number(els.volumeSlider.value) || 100;
+  const parsed = Number(stored);
+  const percent = Number.isFinite(parsed) ? parsed : DEFAULT_APP_VOLUME_PERCENT;
   setAppVolume(percent, { save: false });
 }
 

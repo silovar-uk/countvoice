@@ -1,4 +1,4 @@
-# CountVoice v26 - app volume control
+# CountVoice v27 - default volume 50%
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -124,3 +124,9 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - 音声パック／VOICEVOXローカル音声はWeb Audioのマスターゲインへ、ブラウザ音声はSpeechSynthesisの音量へ反映します。
 - 最後に設定した音量は端末のブラウザ内に保存され、次回起動時にも復元されます。
 - これはアプリ内の読み上げ音量です。iPhone・PC本体の音量、消音スイッチ、Bluetooth機器の音量は別途影響します。
+
+
+## v27: 初期音量を50%へ変更
+
+- 新規利用時のアプリ内音量は **50%** で開始します。
+- すでに手動で変更した音量は端末内に保存されているため、その設定を優先します。

@@ -7,7 +7,7 @@ export class AudioStore {
     this.mediaDestination = null;
     this.outputNode = null;
     this.masterGain = null;
-    this.volume = 1;
+    this.volume = 0.5;
     this.usingMediaBridge = false;
     this.contextListeners = new Set();
     this.mediaListeners = new Set();
@@ -118,7 +118,7 @@ export class AudioStore {
 
   setVolume(value) {
     const parsed = Number(value);
-    const next = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 1;
+    const next = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : this.volume;
     this.volume = next;
 
     if (this.masterGain && this.context) {

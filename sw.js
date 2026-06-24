@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v26-volume-control";
+const CACHE_NAME = "count-voice-app-v27-default-volume-50";
 const ASSETS = [
   "./",
   "./index.html",
