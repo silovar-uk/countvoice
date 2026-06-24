@@ -6,6 +6,8 @@ export class AudioStore {
     this.mediaElement = mediaElement;
     this.mediaDestination = null;
     this.outputNode = null;
+    this.masterGain = null;
+    this.volume = 1;
     this.usingMediaBridge = false;
     this.contextListeners = new Set();
     this.mediaListeners = new Set();
@@ -68,7 +70,10 @@ export class AudioStore {
     }
 
     this.context = new AudioContext({ latencyHint: "interactive" });
+    this.masterGain = this.context.createGain();
+    this.masterGain.gain.value = this.volume;
     this.outputNode = this.context.destination;
+    this.masterGain.connect(this.outputNode);
     this.mediaDestination = null;
     this.usingMediaBridge = false;
     this.mediaBridgePaused = true;
@@ -92,6 +97,41 @@ export class AudioStore {
     }
 
     this.buffers = decoded;
+  }
+
+  setOutputNode(node) {
+    if (!this.context || !this.masterGain) return false;
+    const next = node ?? this.context.destination;
+    try { this.masterGain.disconnect(); } catch { /* no existing route */ }
+    try {
+      this.masterGain.connect(next);
+      this.outputNode = next;
+      return true;
+    } catch {
+      try {
+        this.masterGain.connect(this.context.destination);
+        this.outputNode = this.context.destination;
+      } catch { /* optional */ }
+      return false;
+    }
+  }
+
+  setVolume(value) {
+    const parsed = Number(value);
+    const next = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 1;
+    this.volume = next;
+
+    if (this.masterGain && this.context) {
+      const now = this.context.currentTime;
+      try {
+        this.masterGain.gain.cancelScheduledValues(now);
+        this.masterGain.gain.setTargetAtTime(next, now, 0.012);
+      } catch {
+        this.masterGain.gain.value = next;
+      }
+    }
+
+    return this.volume;
   }
 
   async ensureContext({ resume = true, preferMediaElement = false } = {}) {
@@ -150,12 +190,12 @@ export class AudioStore {
 
     try {
       await this.mediaElement.play();
-      this.outputNode = this.mediaDestination;
+      this.setOutputNode(this.mediaDestination);
       this.usingMediaBridge = true;
       this.mediaBridgePaused = false;
       return true;
     } catch {
-      this.outputNode = this.context.destination;
+      this.setOutputNode(this.context.destination);
       this.usingMediaBridge = false;
       return false;
     }
@@ -207,7 +247,7 @@ export class AudioStore {
     if (!buffer) return null;
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.outputNode ?? context.destination);
+    source.connect(this.masterGain ?? this.outputNode ?? context.destination);
     source.start(Math.max(context.currentTime + 0.01, when));
     return source;
   }

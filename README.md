@@ -1,4 +1,4 @@
-# CountVoice v25 - reliable double finish message
+# CountVoice v26 - app volume control
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -115,3 +115,12 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - バックグラウンド時は、開始中に予約した2回分の終了音声を利用します。
 
 - 「終了時に読む言葉」の試聴ボタンも、終了時と同じく終了メッセージを2回読み上げます。
+
+
+## v26: アプリ音量コントロール
+
+- メイン画面に **アプリの音量** スライダーを追加しました。PC・スマホともに、0〜100%の範囲で即時に調整できます。
+- カウント開始後の集中画面にも同じスライダーを残すため、再生中でもすぐに調整できます。
+- 音声パック／VOICEVOXローカル音声はWeb Audioのマスターゲインへ、ブラウザ音声はSpeechSynthesisの音量へ反映します。
+- 最後に設定した音量は端末のブラウザ内に保存され、次回起動時にも復元されます。
+- これはアプリ内の読み上げ音量です。iPhone・PC本体の音量、消音スイッチ、Bluetooth機器の音量は別途影響します。

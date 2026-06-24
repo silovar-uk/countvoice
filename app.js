@@ -25,6 +25,8 @@ const els = {
   audioRecovery: $("audioRecovery"),
   audioRecoveryMessage: $("audioRecoveryMessage"),
   resumeAudioBtn: $("resumeAudioBtn"),
+  volumeSlider: $("volumeSlider"),
+  volumeValue: $("volumeValue"),
   mode: $("mode"),
   targetSeconds: $("targetSeconds"),
   targetSecondsLabel: $("targetSecondsLabel"),
@@ -76,6 +78,8 @@ const state = {
   audioNeedsRecovery: false,
   audioRecoveryInFlight: false,
   audioReschedulePromise: null,
+  volume: 1,
+  volumeSaveTimer: null,
 };
 
 init();
@@ -84,6 +88,7 @@ async function init() {
   bindEvents();
   bindAudioRecoverySignals();
   configureMediaSession();
+  await restoreVolume();
   await restorePack();
   render();
   updateFinishMessageUI();
@@ -99,6 +104,8 @@ function bindEvents() {
   els.pauseBtn.addEventListener("click", pause);
   els.resetBtn.addEventListener("click", reset);
   els.resumeAudioBtn.addEventListener("click", recoverAudioFromUserAction);
+  els.volumeSlider.addEventListener("input", () => setAppVolume(els.volumeSlider.value));
+  els.volumeSlider.addEventListener("change", () => flushVolumeSave());
   els.mode.addEventListener("change", () => {
     reset();
     updateTargetCopy();
@@ -118,8 +125,43 @@ function bindEvents() {
   window.addEventListener("focus", handleReturnToApp);
   window.addEventListener("pageshow", handleReturnToApp);
   window.addEventListener("pagehide", () => {
+    flushVolumeSave();
     if (!state.running) stopScheduledAudio();
   });
+}
+
+async function restoreVolume() {
+  const stored = await getValue("appVolume").catch(() => null);
+  const percent = Number.isFinite(Number(stored)) ? Number(stored) : Number(els.volumeSlider.value) || 100;
+  setAppVolume(percent, { save: false });
+}
+
+function setAppVolume(percent, { save = true } = {}) {
+  const normalizedPercent = clamp(Math.round(Number(percent) || 0), 0, 100);
+  state.volume = normalizedPercent / 100;
+  els.volumeSlider.value = String(normalizedPercent);
+  els.volumeSlider.setAttribute("aria-valuenow", String(normalizedPercent));
+  els.volumeSlider.setAttribute("aria-valuetext", `${normalizedPercent}%`);
+  els.volumeValue.textContent = `${normalizedPercent}%`;
+  audioStore.setVolume(state.volume);
+
+  if (save) queueVolumeSave();
+}
+
+function queueVolumeSave() {
+  clearTimeout(state.volumeSaveTimer);
+  state.volumeSaveTimer = window.setTimeout(() => {
+    state.volumeSaveTimer = null;
+    setValue("appVolume", Math.round(state.volume * 100)).catch(() => {});
+  }, 180);
+}
+
+function flushVolumeSave() {
+  if (state.volumeSaveTimer) {
+    clearTimeout(state.volumeSaveTimer);
+    state.volumeSaveTimer = null;
+  }
+  setValue("appVolume", Math.round(state.volume * 100)).catch(() => {});
 }
 
 async function restorePack() {
@@ -713,6 +755,7 @@ function browserSpeak(text) {
   const utterance = new SpeechSynthesisUtterance(String(text));
   utterance.lang = "ja-JP";
   utterance.rate = 1.2;
+  utterance.volume = state.volume;
   speechSynthesis.speak(utterance);
 }
 
