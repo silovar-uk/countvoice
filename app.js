@@ -125,10 +125,7 @@ function bindEvents() {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("focus", handleReturnToApp);
   window.addEventListener("pageshow", handleReturnToApp);
-  window.addEventListener("pagehide", () => {
-    flushVolumeSave();
-    if (!state.running) stopScheduledAudio();
-  });
+  window.addEventListener("pagehide", handlePageHide);
 }
 
 async function restoreVolume() {
@@ -192,15 +189,16 @@ async function start() {
     clearFinishState();
   }
 
+  // iPhoneでは、一度止めた・閉じたあとの古い出力先が見かけ上だけ残ることがあります。
+  // 開始／再開のタップごとに、音声出力を新しいユーザー操作として組み直します。
+  configurePlaybackAudioSession();
   if (usesBufferedPack()) {
-    const ready = await prepareAudioForUserAction();
+    const ready = await prepareAudioForUserAction({ forceRecreate: true });
     if (!ready) return;
   } else {
-    resumeBrowserSpeech();
+    resetBrowserSpeechForUserAction();
     setAudioRecoveryNeeded(false);
   }
-
-  configurePlaybackAudioSession();
   state.running = true;
   state.startedAt = performance.now() - state.pausedElapsed * 1000;
   state.nextFallbackSecond = Math.floor(state.pausedElapsed) + 1;
@@ -219,6 +217,7 @@ function pause() {
   clearTimeout(state.timerId);
   stopScheduledAudio();
   audioStore.pauseMediaBridge();
+  audioStore.markForUserGestureReset();
   setAudioRecoveryNeeded(false);
   releaseWakeLock();
   setMediaSessionState("paused");
@@ -235,6 +234,7 @@ function reset() {
   state.scheduledUntilSecond = 0;
   stopScheduledAudio();
   audioStore.pauseMediaBridge();
+  audioStore.markForUserGestureReset();
   setAudioRecoveryNeeded(false);
   releaseWakeLock();
   setMediaSessionState("none");
@@ -542,12 +542,29 @@ function clearFinishState() {
 }
 
 async function handleVisibilityChange() {
-  if (document.visibilityState !== "visible") return;
+  if (document.visibilityState === "hidden") {
+    // バックグラウンド復帰後は、次のユーザー操作で出力先を作り直す。
+    // 予約済みの音声はそのまま活かし、復帰時に実際に止まっていた場合だけ案内する。
+    if (usesBufferedPack()) audioStore.markForUserGestureReset({ hard: true });
+    return;
+  }
   await handleReturnToApp();
 }
 
+function handlePageHide() {
+  flushVolumeSave();
+  if (usesBufferedPack()) audioStore.markForUserGestureReset({ hard: true });
+  if (!state.running) stopScheduledAudio();
+}
+
 async function handleReturnToApp() {
-  if (!state.running) return;
+  if (!state.running) {
+    if (state.completed && usesBufferedPack() && (audioStore.state !== "running" || audioStore.mediaBridgePaused)) {
+      setAudioRecoveryNeeded(true, "終了音声が止まっているかもしれません。「音を復帰」を押すと、終了メッセージを2回読み上げます。");
+    }
+    return;
+  }
+
   await requestWakeLock();
 
   if (!usesBufferedPack()) {
@@ -558,7 +575,8 @@ async function handleReturnToApp() {
 
   const bridgeStopped = els.backgroundMode.checked && audioStore.usingMediaBridge && audioStore.mediaBridgePaused;
   if (audioStore.state !== "running" || bridgeStopped) {
-    setAudioRecoveryNeeded(true, "ほかの再生のあと、音声が止まっているかもしれません。「音を復帰」を押すと、今の秒数から読み上げ直します。");
+    setAudioRecoveryNeeded(true, "アプリを戻したあと音声出力が止まっています。下の「音を復帰」を押すと、今の秒数から読み上げ直します。");
+    tick();
     return;
   }
 
@@ -609,9 +627,13 @@ function bindAudioRecoverySignals() {
   });
 }
 
-async function prepareAudioForUserAction() {
+async function prepareAudioForUserAction({ forceRecreate = false } = {}) {
   try {
-    await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
+    configurePlaybackAudioSession();
+    await audioStore.resumeForUserGesture({
+      preferMediaElement: Boolean(els.backgroundMode.checked),
+      forceRecreate: Boolean(forceRecreate || audioStore.needsUserGestureReset),
+    });
     if (!state.running) setAudioRecoveryNeeded(false);
     return true;
   } catch {
@@ -629,7 +651,9 @@ async function recoverAudioFromUserAction() {
 
   try {
     if (usesBufferedPack()) {
-      const ready = await prepareAudioForUserAction();
+      // ユーザーが押した復帰ボタンでは、必ず古い出力先を捨てて再構築する。
+      stopScheduledAudio();
+      const ready = await prepareAudioForUserAction({ forceRecreate: true });
       if (!ready) return;
       if (state.running) {
         await rescheduleAudioFromCurrentPosition({ clearRecovery: true });
@@ -638,7 +662,7 @@ async function recoverAudioFromUserAction() {
         setAudioRecoveryNeeded(false);
       }
     } else {
-      resumeBrowserSpeech();
+      resetBrowserSpeechForUserAction();
       if (state.completed) playBrowserFinishFallback(finishMessageText());
       setAudioRecoveryNeeded(false);
     }
@@ -670,7 +694,7 @@ async function rescheduleAudioFromCurrentPosition({ clearRecovery = false } = {}
       resumeBrowserSpeech();
     }
 
-    if (clearRecovery && audioStore.state === "running" && !audioStore.mediaBridgePaused) {
+    if (clearRecovery && audioStore.state === "running" && (!els.backgroundMode.checked || !audioStore.mediaBridgePaused)) {
       setAudioRecoveryNeeded(false);
     }
   })();
@@ -697,6 +721,12 @@ function resumeBrowserSpeech() {
   try { speechSynthesis.resume(); } catch { /* optional */ }
 }
 
+function resetBrowserSpeechForUserAction() {
+  if (!("speechSynthesis" in window)) return;
+  try { speechSynthesis.cancel(); } catch { /* optional */ }
+  resumeBrowserSpeech();
+}
+
 function usesBufferedPack() {
   return (
     (els.audioSource.value === "pack" || els.audioSource.value === "voicevox")
@@ -712,19 +742,28 @@ function shouldSpeak(second, countValue) {
 
 async function playTestCue() {
   if (usesBufferedPack()) {
-    await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
+    await audioStore.resumeForUserGesture({
+      preferMediaElement: Boolean(els.backgroundMode.checked),
+      forceRecreate: true,
+    });
     await audioStore.play("1");
     return;
   }
+  resetBrowserSpeechForUserAction();
   await speakCueNow("1");
 }
 
 async function playFinishTest() {
   const message = finishMessageText();
   if (usesBufferedPack() && audioStore.has(message)) {
-    await playFinishSequenceNow({ restart: true, userGesture: true, includeFinalCount: false });
+    await audioStore.resumeForUserGesture({
+      preferMediaElement: Boolean(els.backgroundMode.checked),
+      forceRecreate: true,
+    });
+    await playFinishSequenceNow({ restart: true, userGesture: false, includeFinalCount: false });
     return;
   }
+  resetBrowserSpeechForUserAction();
   playBrowserFinishFallback(message);
 }
 

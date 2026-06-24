@@ -12,6 +12,9 @@ export class AudioStore {
     this.contextListeners = new Set();
     this.mediaListeners = new Set();
     this.mediaBridgePaused = false;
+    this.needsUserGestureReset = false;
+    this.hardResetRequired = false;
+    this.suppressMediaEvents = false;
 
     this.bindMediaElementEvents();
   }
@@ -35,17 +38,22 @@ export class AudioStore {
 
     this.mediaElement.addEventListener("pause", () => {
       this.mediaBridgePaused = true;
-      this.emitMediaEvent("pause");
+      if (!this.suppressMediaEvents) this.emitMediaEvent("pause");
     });
 
     this.mediaElement.addEventListener("playing", () => {
       this.mediaBridgePaused = false;
-      this.emitMediaEvent("playing");
+      if (!this.suppressMediaEvents) this.emitMediaEvent("playing");
     });
 
     this.mediaElement.addEventListener("ended", () => {
       this.mediaBridgePaused = true;
-      this.emitMediaEvent("ended");
+      if (!this.suppressMediaEvents) this.emitMediaEvent("ended");
+    });
+
+    this.mediaElement.addEventListener("error", () => {
+      this.mediaBridgePaused = true;
+      if (!this.suppressMediaEvents) this.emitMediaEvent("error");
     });
   }
 
@@ -63,40 +71,76 @@ export class AudioStore {
     }
   }
 
-  async createContext() {
-    if (this.mediaElement && this.mediaElement.srcObject) {
-      try { this.mediaElement.pause(); } catch { /* optional */ }
-      this.mediaElement.srcObject = null;
-    }
+  markForUserGestureReset({ hard = false } = {}) {
+    this.needsUserGestureReset = true;
+    this.hardResetRequired ||= Boolean(hard);
+  }
 
-    this.context = new AudioContext({ latencyHint: "interactive" });
-    this.masterGain = this.context.createGain();
+  clearUserGestureReset() {
+    this.needsUserGestureReset = false;
+    this.hardResetRequired = false;
+  }
+
+  beginContext() {
+    const context = new AudioContext({ latencyHint: "interactive" });
+    this.context = context;
+    this.masterGain = context.createGain();
     this.masterGain.gain.value = this.volume;
-    this.outputNode = this.context.destination;
+    this.outputNode = context.destination;
     this.masterGain.connect(this.outputNode);
     this.mediaDestination = null;
     this.usingMediaBridge = false;
     this.mediaBridgePaused = true;
-    this.context.addEventListener("statechange", () => this.emitContextState());
+    context.addEventListener("statechange", () => {
+      if (this.context === context) this.emitContextState();
+    });
     this.emitContextState();
-
-    if (this.clipData.size > 0) {
-      await this.rehydrateBuffers();
-    }
-
-    return this.context;
+    return context;
   }
 
-  async rehydrateBuffers() {
-    if (!this.context || this.context.state === "closed") return;
+  async rehydrateBuffersFor(context = this.context) {
+    if (!context || context.state === "closed") return;
     const decoded = new Map();
 
     for (const [key, bytes] of this.clipData.entries()) {
-      const buffer = await this.context.decodeAudioData(bytes.slice(0));
+      const buffer = await context.decodeAudioData(bytes.slice(0));
       decoded.set(key, buffer);
     }
 
-    this.buffers = decoded;
+    if (this.context === context) this.buffers = decoded;
+  }
+
+  releaseMediaBridge() {
+    const media = this.mediaElement;
+    this.suppressMediaEvents = true;
+    try {
+      if (media && !media.paused) media.pause();
+      if (media?.srcObject) media.srcObject = null;
+    } catch { /* optional cleanup */ }
+    this.suppressMediaEvents = false;
+
+    this.mediaDestination = null;
+    this.usingMediaBridge = false;
+    this.mediaBridgePaused = true;
+    if (this.context && this.masterGain && this.context.state !== "closed") {
+      this.setOutputNode(this.context.destination);
+    }
+  }
+
+  recreateContextForUserGesture() {
+    const previous = this.context;
+    this.releaseMediaBridge();
+    this.context = null;
+    this.masterGain = null;
+    this.outputNode = null;
+    this.buffers = new Map();
+
+    // Do not await close(): on iOS, resume/play needs to happen while the tap is still active.
+    if (previous && previous.state !== "closed") {
+      try { previous.close().catch(() => {}); } catch { /* optional cleanup */ }
+    }
+
+    return this.beginContext();
   }
 
   setOutputNode(node) {
@@ -136,7 +180,7 @@ export class AudioStore {
 
   async ensureContext({ resume = true, preferMediaElement = false } = {}) {
     if (!this.context || this.context.state === "closed") {
-      await this.createContext();
+      this.beginContext();
     }
 
     if (resume && this.context.state !== "running") {
@@ -150,33 +194,29 @@ export class AudioStore {
     return this.context;
   }
 
-  async resumeForUserGesture({ preferMediaElement = false } = {}) {
-    const context = await this.ensureContext({ resume: true, preferMediaElement: false });
+  primeOutput() {
+    const context = this.context;
+    if (!context || !this.masterGain || context.state !== "running") return;
 
-    // iOS Safari may expose an externally interrupted context. A second resume
-    // in the same user gesture is harmless and helps after an audio-session handoff.
-    if (context.state !== "running") {
-      await context.resume();
-    }
-
-    if (preferMediaElement) {
-      const bridgeReady = await this.enableMediaBridge();
-      if (!bridgeReady) {
-        throw new Error("MEDIA_BRIDGE_NOT_READY");
-      }
-    }
-
-    if (context.state !== "running") {
-      throw new Error(`AUDIO_CONTEXT_${context.state.toUpperCase()}`);
-    }
-
-    return context;
+    try {
+      const source = context.createBufferSource();
+      const gain = context.createGain();
+      const buffer = context.createBuffer(1, 1, context.sampleRate);
+      buffer.getChannelData(0)[0] = 0;
+      gain.gain.value = 0;
+      source.buffer = buffer;
+      source.connect(gain).connect(this.masterGain);
+      source.start(context.currentTime);
+      source.stop(context.currentTime + 0.02);
+    } catch { /* warm-up is best effort */ }
   }
 
-  async enableMediaBridge() {
+  enableMediaBridge({ force = false } = {}) {
     if (!this.context || !this.mediaElement || typeof this.context.createMediaStreamDestination !== "function") {
-      return false;
+      return Promise.resolve(false);
     }
+
+    if (force) this.releaseMediaBridge();
 
     if (!this.mediaDestination) {
       this.mediaDestination = this.context.createMediaStreamDestination();
@@ -188,17 +228,69 @@ export class AudioStore {
       this.mediaElement.volume = 1;
     }
 
-    try {
-      await this.mediaElement.play();
-      this.setOutputNode(this.mediaDestination);
-      this.usingMediaBridge = true;
-      this.mediaBridgePaused = false;
-      return true;
-    } catch {
-      this.setOutputNode(this.context.destination);
-      this.usingMediaBridge = false;
-      return false;
+    this.setOutputNode(this.mediaDestination);
+
+    // Call play immediately, before awaiting any buffer decoding, to keep iOS user activation.
+    let playPromise;
+    try { playPromise = this.mediaElement.play(); } catch { playPromise = Promise.reject(new Error("MEDIA_PLAY_FAILED")); }
+
+    return Promise.resolve(playPromise)
+      .then(() => {
+        this.usingMediaBridge = true;
+        this.mediaBridgePaused = false;
+        this.primeOutput();
+        return true;
+      })
+      .catch(() => {
+        this.setOutputNode(this.context.destination);
+        this.usingMediaBridge = false;
+        this.mediaBridgePaused = true;
+        return false;
+      });
+  }
+
+  async resumeForUserGesture({ preferMediaElement = false, forceRecreate = false } = {}) {
+    const mustRecreate = Boolean(forceRecreate || this.hardResetRequired);
+    let context;
+
+    if (mustRecreate) {
+      context = this.recreateContextForUserGesture();
+    } else if (!this.context || this.context.state === "closed") {
+      context = this.beginContext();
+    } else {
+      context = this.context;
     }
+
+    // Start the audio session immediately while the original button tap is still live.
+    const resumePromise = context.state === "running" ? Promise.resolve() : context.resume();
+    const bridgePromise = preferMediaElement
+      ? this.enableMediaBridge({
+        force: Boolean(mustRecreate || this.needsUserGestureReset || this.mediaBridgePaused || !this.usingMediaBridge),
+      })
+      : Promise.resolve(true);
+
+    await resumePromise;
+
+    if (!preferMediaElement) {
+      if (this.usingMediaBridge || this.mediaDestination) this.releaseMediaBridge();
+      this.setOutputNode(context.destination);
+    }
+
+    const bridgeReady = await bridgePromise;
+    if (preferMediaElement && !bridgeReady) throw new Error("MEDIA_BRIDGE_NOT_READY");
+
+    if (mustRecreate && this.clipData.size > 0) {
+      await this.rehydrateBuffersFor(context);
+    }
+
+    this.primeOutput();
+
+    if (context.state !== "running") {
+      throw new Error(`AUDIO_CONTEXT_${context.state.toUpperCase()}`);
+    }
+
+    this.clearUserGestureReset();
+    return context;
   }
 
   pauseMediaBridge() {
