@@ -1,6 +1,6 @@
-import { AudioStore, arrayBufferToBase64 } from "./audio.js?v=4";
-import { cueTextForSecond, cueTextsForPack } from "./count-format.js?v=4";
-import { deleteValue, getValue, setValue } from "./db.js?v=4";
+import { AudioStore, arrayBufferToBase64 } from "./audio.js?v=5";
+import { cueTextForSecond, cueTextsForPack } from "./count-format.js?v=5";
+import { deleteValue, getValue, setValue } from "./db.js?v=5";
 
 const audioStore = new AudioStore();
 const state = {
@@ -168,14 +168,19 @@ function browserSpeak(text) {
 async function importPack(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  const pack = JSON.parse(await file.text());
-  validatePack(pack);
-  state.pack = pack;
-  await setValue("pack", pack);
-  await audioStore.loadPack(pack);
-  els.packStatus.textContent = `${pack.meta?.name ?? file.name} を取り込みました。`;
-  els.audioSource.value = "pack";
-  event.target.value = "";
+  try {
+    const pack = JSON.parse(await file.text());
+    validatePack(pack);
+    state.pack = pack;
+    await setValue("pack", pack);
+    await audioStore.loadPack(pack);
+    els.packStatus.textContent = `${pack.meta?.name ?? file.name} を取り込みました。`;
+    els.audioSource.value = "pack";
+  } catch {
+    els.packStatus.textContent = "PONVOICEとして読み込めませんでした。ファイルの中身を確認してください。";
+  } finally {
+    event.target.value = "";
+  }
 }
 
 async function clearPack() {
