@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v18-icons-packurl";
+const CACHE_NAME = "count-voice-app-v22-zundamon-audio-recovery";
 const ASSETS = [
   "./",
   "./index.html",
@@ -22,6 +22,7 @@ const ASSETS = [
   "./icons/favicon-48x48.png",
   "./icons/favicon-32x32.png",
   "./icons/favicon-16x16.png",
+  "./packs/poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice",
 ];
 
 self.addEventListener("install", (event) => {

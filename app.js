@@ -13,9 +13,16 @@ const els = {
   countDisplay: $("countDisplay"),
   modeLabel: $("modeLabel"),
   unitLabel: $("unitLabel"),
+  countState: $("countState"),
+  targetSummary: $("targetSummary"),
+  sessionProgress: $("sessionProgress"),
+  cheerMessage: $("cheerMessage"),
   startBtn: $("startBtn"),
   pauseBtn: $("pauseBtn"),
   resetBtn: $("resetBtn"),
+  audioRecovery: $("audioRecovery"),
+  audioRecoveryMessage: $("audioRecoveryMessage"),
+  resumeAudioBtn: $("resumeAudioBtn"),
   mode: $("mode"),
   targetSeconds: $("targetSeconds"),
   targetSecondsLabel: $("targetSecondsLabel"),
@@ -59,12 +66,16 @@ const state = {
   finishPlayed: false,
   finishSource: null,
   finishCleanupTimer: null,
+  audioNeedsRecovery: false,
+  audioRecoveryInFlight: false,
+  audioReschedulePromise: null,
 };
 
 init();
 
 async function init() {
   bindEvents();
+  bindAudioRecoverySignals();
   configureMediaSession();
   await restorePack();
   render();
@@ -80,6 +91,7 @@ function bindEvents() {
   els.startBtn.addEventListener("click", start);
   els.pauseBtn.addEventListener("click", pause);
   els.resetBtn.addEventListener("click", reset);
+  els.resumeAudioBtn.addEventListener("click", recoverAudioFromUserAction);
   els.mode.addEventListener("change", () => {
     reset();
     updateTargetCopy();
@@ -96,6 +108,8 @@ function bindEvents() {
   els.connectBtn.addEventListener("click", connectVoicevox);
   els.prepareBtn.addEventListener("click", prepareVoicevoxClips);
   document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("focus", handleReturnToApp);
+  window.addEventListener("pageshow", handleReturnToApp);
   window.addEventListener("pagehide", () => {
     if (!state.running) stopScheduledAudio();
   });
@@ -128,15 +142,11 @@ async function start() {
   }
 
   if (usesBufferedPack()) {
-    try {
-      await audioStore.ensureContext({
-        resume: true,
-        preferMediaElement: Boolean(els.backgroundMode.checked),
-      });
-    } catch {
-      els.backgroundStatus.textContent = "音声の開始を許可できませんでした。もう一度「開始」を押してください。";
-      return;
-    }
+    const ready = await prepareAudioForUserAction();
+    if (!ready) return;
+  } else {
+    resumeBrowserSpeech();
+    setAudioRecoveryNeeded(false);
   }
 
   configurePlaybackAudioSession();
@@ -158,6 +168,7 @@ function pause() {
   clearTimeout(state.timerId);
   stopScheduledAudio();
   audioStore.pauseMediaBridge();
+  setAudioRecoveryNeeded(false);
   releaseWakeLock();
   setMediaSessionState("paused");
   render();
@@ -173,6 +184,7 @@ function reset() {
   state.scheduledUntilSecond = 0;
   stopScheduledAudio();
   audioStore.pauseMediaBridge();
+  setAudioRecoveryNeeded(false);
   releaseWakeLock();
   setMediaSessionState("none");
   render();
@@ -185,9 +197,7 @@ function tick() {
   const elapsed = elapsedSeconds();
   const target = targetSeconds();
   const elapsedFloor = Math.floor(elapsed);
-  const visible = visibleValue(elapsedFloor, target);
-  els.countDisplay.textContent = visible;
-  els.countDisplay.setAttribute("aria-label", timerAriaLabel(visible));
+  updateCounterUI(elapsedFloor, target);
 
   if (usesBufferedPack()) {
     scheduleAudioAhead().catch(() => {});
@@ -236,6 +246,16 @@ function elapsedSeconds() {
 
 async function scheduleAudioAhead() {
   if (!state.running || !usesBufferedPack()) return;
+
+  if (audioStore.state !== "running") {
+    setAudioRecoveryNeeded(true, "ほかの再生のあと、音声出力が止まりました。下の「音を復帰」を押すと、今の秒数から読み上げ直します。");
+    return;
+  }
+
+  if (els.backgroundMode.checked && audioStore.usingMediaBridge && audioStore.mediaBridgePaused) {
+    setAudioRecoveryNeeded(true, "バックグラウンド用の音声出力が一時停止しています。「音を復帰」を押すと、今の秒数から読み上げ直します。");
+    return;
+  }
 
   const elapsed = elapsedSeconds();
   const elapsedFloor = Math.floor(elapsed);
@@ -347,22 +367,151 @@ function clearFinishState() {
 }
 
 async function handleVisibilityChange() {
-  if (!state.running) return;
+  if (document.visibilityState !== "visible") return;
+  await handleReturnToApp();
+}
 
-  if (document.visibilityState === "visible") {
-    await requestWakeLock();
-    await scheduleAudioAhead();
+async function handleReturnToApp() {
+  if (!state.running) return;
+  await requestWakeLock();
+
+  if (!usesBufferedPack()) {
+    resumeBrowserSpeech();
     tick();
+    return;
   }
+
+  const bridgeStopped = els.backgroundMode.checked && audioStore.usingMediaBridge && audioStore.mediaBridgePaused;
+  if (audioStore.state !== "running" || bridgeStopped) {
+    setAudioRecoveryNeeded(true, "ほかの再生のあと、音声が止まっているかもしれません。「音を復帰」を押すと、今の秒数から読み上げ直します。");
+    return;
+  }
+
+  await rescheduleAudioFromCurrentPosition();
+  tick();
 }
 
 async function rescheduleRunningAudio() {
   updateBackgroundStatus();
   if (!state.running) return;
-  stopScheduledAudio();
-  state.scheduledUntilSecond = Math.floor(elapsedSeconds());
-  state.nextFallbackSecond = state.scheduledUntilSecond + 1;
-  await scheduleAudioAhead();
+
+  if (usesBufferedPack() && (audioStore.state !== "running" || (els.backgroundMode.checked && audioStore.usingMediaBridge && audioStore.mediaBridgePaused))) {
+    setAudioRecoveryNeeded(true, "音声の出力が止まっています。「音を復帰」を押すと、今の秒数から読み上げ直します。");
+    return;
+  }
+
+  await rescheduleAudioFromCurrentPosition();
+}
+
+
+function bindAudioRecoverySignals() {
+  audioStore.onContextStateChange(({ state: contextState }) => {
+    if (!state.running) return;
+
+    if (contextState !== "running") {
+      setAudioRecoveryNeeded(true, "ほかの再生によって音声が一時停止しました。ほかの音を止めてから「音を復帰」を押してください。");
+      return;
+    }
+
+    if (state.audioNeedsRecovery) {
+      rescheduleAudioFromCurrentPosition({ clearRecovery: true }).catch(() => {
+        setAudioRecoveryNeeded(true, "音声を再接続できませんでした。「音を復帰」をもう一度押してください。");
+      });
+    }
+  });
+
+  audioStore.onMediaBridgeEvent(({ type }) => {
+    if (!state.running || !els.backgroundMode.checked || !audioStore.usingMediaBridge) return;
+
+    if (type === "pause" || type === "ended") {
+      setAudioRecoveryNeeded(true, "ほかの再生で音声出力が止まりました。ほかの音を止めてから「音を復帰」を押してください。");
+      return;
+    }
+
+    if (type === "playing" && state.audioNeedsRecovery && audioStore.state === "running") {
+      rescheduleAudioFromCurrentPosition({ clearRecovery: true }).catch(() => {});
+    }
+  });
+}
+
+async function prepareAudioForUserAction() {
+  try {
+    await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
+    if (!state.running) setAudioRecoveryNeeded(false);
+    return true;
+  } catch {
+    setAudioRecoveryNeeded(true, "音声を再開できませんでした。ほかの音を止めてから「音を復帰」を押してください。");
+    updateBackgroundStatus("音声の開始を許可できませんでした。ほかの再生を止めてから、もう一度「開始」または「音を復帰」を押してください。");
+    return false;
+  }
+}
+
+async function recoverAudioFromUserAction() {
+  if (state.audioRecoveryInFlight) return;
+  state.audioRecoveryInFlight = true;
+  els.resumeAudioBtn.disabled = true;
+  els.resumeAudioBtn.textContent = "復帰中…";
+
+  try {
+    if (usesBufferedPack()) {
+      const ready = await prepareAudioForUserAction();
+      if (!ready) return;
+      if (state.running) await rescheduleAudioFromCurrentPosition({ clearRecovery: true });
+    } else {
+      resumeBrowserSpeech();
+      setAudioRecoveryNeeded(false);
+    }
+
+    updateBackgroundStatus(state.running
+      ? "音を復帰しました。今の秒数から読み上げ直します。"
+      : "音を復帰しました。開始すると音声を再生します。");
+  } finally {
+    state.audioRecoveryInFlight = false;
+    els.resumeAudioBtn.disabled = false;
+    els.resumeAudioBtn.textContent = "音を復帰";
+  }
+}
+
+async function rescheduleAudioFromCurrentPosition({ clearRecovery = false } = {}) {
+  if (!state.running) return;
+  if (state.audioReschedulePromise) return state.audioReschedulePromise;
+
+  const job = (async () => {
+    stopScheduledAudio();
+    state.scheduledUntilSecond = Math.floor(elapsedSeconds());
+    state.nextFallbackSecond = state.scheduledUntilSecond + 1;
+
+    if (usesBufferedPack()) {
+      await scheduleAudioAhead();
+    } else {
+      resumeBrowserSpeech();
+    }
+
+    if (clearRecovery && audioStore.state === "running" && !audioStore.mediaBridgePaused) {
+      setAudioRecoveryNeeded(false);
+    }
+  })();
+
+  state.audioReschedulePromise = job;
+  try {
+    await job;
+  } finally {
+    if (state.audioReschedulePromise === job) state.audioReschedulePromise = null;
+  }
+}
+
+function setAudioRecoveryNeeded(needsRecovery, message = "") {
+  state.audioNeedsRecovery = Boolean(needsRecovery);
+  els.audioRecovery.hidden = !state.audioNeedsRecovery;
+
+  if (state.audioNeedsRecovery) {
+    els.audioRecoveryMessage.textContent = message || "音声が止まった場合は、ほかの再生を止めてから「音を復帰」を押してください。";
+  }
+}
+
+function resumeBrowserSpeech() {
+  if (!("speechSynthesis" in window)) return;
+  try { speechSynthesis.resume(); } catch { /* optional */ }
 }
 
 function usesBufferedPack() {
@@ -380,7 +529,7 @@ function shouldSpeak(second, countValue) {
 
 async function playTestCue() {
   if (usesBufferedPack()) {
-    await audioStore.ensureContext({ resume: true, preferMediaElement: Boolean(els.backgroundMode.checked) });
+    await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
     await audioStore.play("1");
     return;
   }
@@ -390,7 +539,7 @@ async function playTestCue() {
 async function playFinishTest() {
   const message = finishMessageText();
   if (usesBufferedPack()) {
-    await audioStore.ensureContext({ resume: true, preferMediaElement: Boolean(els.backgroundMode.checked) });
+    await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
     if (audioStore.has(message)) {
       await audioStore.play(message);
       return;
@@ -423,6 +572,7 @@ async function speakCueNow(text) {
 
 function browserSpeak(text) {
   if (!("speechSynthesis" in window)) return;
+  resumeBrowserSpeech();
   speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(String(text));
   utterance.lang = "ja-JP";
@@ -599,17 +749,59 @@ function cleanEngineUrl() {
 function render() {
   const target = targetSeconds();
   const elapsed = Math.min(Math.floor(elapsedSeconds()), target);
-  const visible = visibleValue(elapsed, target);
-  els.modeLabel.textContent = els.mode.value === "down" ? "カウントダウン" : "カウントアップ";
-  els.unitLabel.textContent = "秒";
-  els.countDisplay.textContent = visible;
-  els.countDisplay.setAttribute("aria-label", timerAriaLabel(visible));
+  updateCounterUI(elapsed, target);
   els.startBtn.textContent = state.completed ? "もう一度開始" : state.pausedElapsed > 0 ? "再開" : "開始";
+  els.pauseBtn.disabled = !state.running;
+  els.resetBtn.disabled = !state.running && state.pausedElapsed === 0 && !state.completed;
   updateTargetCopy();
 }
 
+function updateCounterUI(elapsed, target) {
+  const visible = visibleValue(elapsed, target);
+  const mode = els.mode.value;
+  const viewState = state.completed
+    ? "completed"
+    : state.running
+      ? "running"
+      : state.pausedElapsed > 0
+        ? "paused"
+        : "stopped";
+
+  document.body.dataset.appState = viewState;
+  els.modeLabel.textContent = mode === "down" ? "カウントダウン" : "カウントアップ";
+  els.unitLabel.textContent = "秒";
+  els.countDisplay.textContent = visible;
+  els.countDisplay.setAttribute("aria-label", timerAriaLabel(visible));
+  els.sessionProgress.max = target;
+  els.sessionProgress.value = Math.min(elapsed, target);
+  els.sessionProgress.setAttribute("aria-valuetext", `${Math.min(elapsed, target)}秒 / ${target}秒`);
+  els.targetSummary.textContent = mode === "down"
+    ? `スタート ${formatDuration(target)}`
+    : `ゴールまで ${formatDuration(target)}`;
+  els.countState.textContent = statePillCopy(viewState);
+  els.cheerMessage.textContent = cheerCopy(viewState, elapsed, target);
+}
+
+function statePillCopy(viewState) {
+  if (viewState === "completed") return "時間になったのだ！";
+  if (viewState === "running") return "数えているのだ";
+  if (viewState === "paused") return "ひと休みなのだ";
+  return "準備OKなのだ";
+}
+
+function cheerCopy(viewState, elapsed, target) {
+  if (viewState === "completed") return "時間になったのだ！ おつかれさまなのだ。";
+  if (viewState === "paused") return "ひと休みして、また戻ってくればいいのだ。";
+  if (viewState === "stopped") return "準備OKなのだ。自分のペースでいこう。";
+
+  const progress = target ? elapsed / target : 0;
+  if (progress < 0.25) return "いいスタートなのだ。焦らず数えていこう。";
+  if (progress < 0.75) return "いいペースなのだ。そのままいこう。";
+  return "もうひと息なのだ。ゴールはすぐそこ。";
+}
+
 function targetSeconds() {
-  return clamp(Number(els.targetSeconds.value) || 60, 1, 86400);
+  return clamp(Number(els.targetSeconds.value) || 900, 1, 86400);
 }
 
 function countValueAtSecond(second, target) {
@@ -628,10 +820,10 @@ function updateTargetCopy() {
   const duration = formatDuration(targetSeconds());
   if (els.mode.value === "up") {
     els.targetSecondsLabel.textContent = "終了まで（秒）";
-    els.targetSecondsHint.textContent = `カウントアップも ${duration} で自動終了します。例：300秒 = 5分`;
+    els.targetSecondsHint.textContent = `${duration}で自動終了します。例：300秒 = 5分`;
   } else {
     els.targetSecondsLabel.textContent = "開始時間（秒）";
-    els.targetSecondsHint.textContent = `カウントダウンは ${duration} から開始し、0秒で終了します。`;
+    els.targetSecondsHint.textContent = `${duration}から開始し、0秒で終了します。`;
   }
 }
 
@@ -735,6 +927,11 @@ function updateBackgroundStatus(message = "") {
     return;
   }
 
+  if (state.audioNeedsRecovery) {
+    els.backgroundStatus.textContent = "ほかの再生のあと音声が止まりました。ほかの音を止めてから、操作の近くに出る「音を復帰」を押してください。";
+    return;
+  }
+
   if (!state.pack || audioStore.buffers.size === 0) {
     els.backgroundStatus.textContent = "まず上の「URLから読み込む」で音声パックを準備してください。";
     return;
@@ -757,7 +954,7 @@ function updateBackgroundStatus(message = "") {
     return;
   }
 
-  els.backgroundStatus.textContent = `開始時に${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約します。終了時は「${finishMessageText()}」を読み上げます。`;
+  els.backgroundStatus.textContent = `開始時に${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約します。ほかの再生で止まった場合は、操作の近くの「音を復帰」で読み上げを戻せます。`;
 }
 
 function hasFinishAudio() {

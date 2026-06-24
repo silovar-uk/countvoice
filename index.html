@@ -3,36 +3,42 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#2ab14c" />
-    <meta name="msapplication-TileColor" content="#2ab14c" />
+    <meta name="theme-color" content="#74c84a" />
+    <meta name="msapplication-TileColor" content="#74c84a" />
     <meta name="msapplication-TileImage" content="./icons/icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="毎秒カウント" />
-    <title>毎秒カウント</title>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="ぽん、と数える" />
+    <title>ぽん、と数える</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=12" />
+    <link rel="stylesheet" href="./styles.css?v=20" />
   </head>
-  <body>
+  <body data-app-state="stopped">
     <main class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Web Audio / VOICEVOX ready</p>
-          <h1>毎秒カウント</h1>
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div>
+            <p class="eyebrow">ずんだボイスで、1秒ずつ。</p>
+            <h1>ぽん、と数える</h1>
+          </div>
         </div>
-        <a class="tool-link" href="./voice-pack-maker.html">音声パック作成</a>
+        <a class="tool-link" href="./voice-pack-maker.html">音声をつくる</a>
       </header>
 
       <section class="quick-load-card" aria-labelledby="quick-load-title">
+        <div class="leaf-dots" aria-hidden="true"><span></span><span></span><span></span></div>
         <div class="quick-load-heading">
-          <span class="step-kicker">最初にここ</span>
+          <span class="step-kicker">① まずここ</span>
           <div>
-            <h2 id="quick-load-title">URLから音声パックを読み込む</h2>
-            <p>終了メッセージ入りの音声パックを先に読み込むと、iPhone向けの毎秒読み上げを使えます。</p>
+            <h2 id="quick-load-title">音声パックを準備するのだ</h2>
+            <p>下のボタンを押すだけで、終了メッセージ入りのずんだボイスを読み込みます。</p>
           </div>
         </div>
         <div class="quick-load-row">
@@ -40,14 +46,49 @@
           <input id="packUrl" type="url" value="./packs/poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice" aria-label="音声パックURL" />
           <button id="loadPackUrlBtn" class="primary quick-load-button">URLから読み込む</button>
         </div>
-        <p id="packStatus" class="quick-load-status" role="status">まだ音声パックを読み込んでいません。まずは上のボタンを押してください。</p>
+        <p id="packStatus" class="quick-load-status" role="status">まだ準備中なのだ。まずは上のボタンを押してね。</p>
       </section>
 
       <section class="counter-panel" aria-label="カウント操作">
+        <div class="counter-panel-header">
+          <span id="countState" class="state-pill">準備OKなのだ</span>
+          <span id="targetSummary" class="target-pill">ゴールまで 15分</span>
+        </div>
+
         <div class="readout" aria-live="off">
-          <span id="modeLabel">カウントアップ</span>
-          <strong id="countDisplay" role="timer" aria-label="経過時間 0秒">0</strong>
-          <span id="unitLabel">秒</span>
+          <div class="readout-orbit orbit-one" aria-hidden="true"></div>
+          <div class="readout-orbit orbit-two" aria-hidden="true"></div>
+          <div class="readout-copy">
+            <span id="modeLabel">カウントアップ</span>
+            <strong id="countDisplay" role="timer" aria-label="経過時間 0秒">0</strong>
+            <span id="unitLabel">秒</span>
+          </div>
+          <div class="sprout-buddy" aria-hidden="true">
+            <span class="buddy-leaf leaf-a"></span>
+            <span class="buddy-leaf leaf-b"></span>
+            <span class="buddy-face"><i></i><i></i><b></b></span>
+          </div>
+        </div>
+
+        <div class="session-meter" aria-label="進行状況">
+          <div class="meter-labels"><span>はじまり</span><span>ゴール</span></div>
+          <progress id="sessionProgress" value="0" max="900">0%</progress>
+        </div>
+        <p id="cheerMessage" class="cheer-message" role="status">準備OKなのだ。自分のペースでいこう。</p>
+
+        <div class="start-duration" aria-label="今回のゴール時間">
+          <div class="start-duration-heading">
+            <span class="duration-leaf" aria-hidden="true">◖</span>
+            <div>
+              <span class="duration-kicker">今回のゴール</span>
+              <label id="targetSecondsLabel" for="targetSeconds">終了まで（秒）</label>
+            </div>
+          </div>
+          <div class="duration-input-wrap">
+            <input id="targetSeconds" type="number" min="1" max="86400" value="900" inputmode="numeric" aria-describedby="targetSecondsHint" />
+            <span aria-hidden="true">秒</span>
+          </div>
+          <p id="targetSecondsHint" class="field-hint">15分で自動終了します。例：300秒 = 5分</p>
         </div>
 
         <div class="primary-actions">
@@ -55,27 +96,79 @@
           <button id="pauseBtn">一時停止</button>
           <button id="resetBtn">リセット</button>
         </div>
+
+        <div id="audioRecovery" class="audio-recovery" hidden role="status" aria-live="polite">
+          <span class="audio-recovery-icon" aria-hidden="true">♪</span>
+          <p id="audioRecoveryMessage">ほかの再生のあと音が戻らない場合は、ほかの音を止めてから「音を復帰」を押してください。</p>
+          <button id="resumeAudioBtn" type="button">音を復帰</button>
+        </div>
       </section>
 
       <section class="finish-card" aria-labelledby="finish-title">
-        <div>
-          <h2 id="finish-title">終了時間と終了メッセージ</h2>
-          <p id="finishMessageStatus">終了時の音声を確認しています。</p>
+        <div class="card-heading-wrap">
+          <span class="section-icon" aria-hidden="true">✦</span>
+          <div>
+            <h2 id="finish-title">終わりのひとこと</h2>
+            <p id="finishMessageStatus">終了時の音声を確認しています。</p>
+          </div>
         </div>
         <div class="finish-message-stack">
           <span class="finish-kicker">終了時に読む言葉</span>
           <strong id="finishMessageDisplay">「時間になったのだ」</strong>
           <div class="finish-actions">
-            <button id="testFinishBtn">終了メッセージを試聴</button>
-            <a class="text-link" href="./voice-pack-maker.html">VOICEVOXで変更する</a>
+            <button id="testFinishBtn">試聴する</button>
+            <a class="text-link" href="./voice-pack-maker.html">言葉を変える</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-card" aria-labelledby="settings-title">
+        <div class="settings-heading">
+          <div>
+            <span class="step-kicker small">② カウント設定</span>
+            <h2 id="settings-title">今回はどう数える？</h2>
+            <p>ゴール時間と読み上げ方を、自分の集中しやすい形に整えるのだ。</p>
+          </div>
+          <span class="settings-sprout" aria-hidden="true">✿</span>
+        </div>
+        <div class="settings-grid" aria-label="設定">
+          <div class="setting">
+            <label for="mode">モード</label>
+            <select id="mode">
+              <option value="up">カウントアップ</option>
+              <option value="down">カウントダウン</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <label for="intervalSeconds">読み上げ間隔</label>
+            <select id="intervalSeconds">
+              <option value="1">毎秒</option>
+              <option value="5">5秒ごと</option>
+              <option value="10">10秒ごと</option>
+              <option value="60">1分ごと</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <label for="audioSource">音声</label>
+            <select id="audioSource">
+              <option value="pack">音声パック</option>
+              <option value="voicevox">VOICEVOXローカル</option>
+              <option value="browser">ブラウザ音声</option>
+              <option value="silent">音なし</option>
+            </select>
           </div>
         </div>
       </section>
 
       <section class="background-card" aria-labelledby="background-title">
-        <div>
-          <h2 id="background-title">iPhone バックグラウンド音声</h2>
-          <p id="backgroundStatus">音声パックを読み込んだ後、開始すると30分先まで音声を予約します。</p>
+        <div class="card-heading-wrap">
+          <span class="section-icon" aria-hidden="true">◌</span>
+          <div>
+            <h2 id="background-title">iPhoneで使うとき</h2>
+            <p id="backgroundStatus">音声パックを読み込んだ後、開始すると30分先まで音声を予約します。</p>
+          </div>
         </div>
         <label class="toggle-row" for="backgroundMode">
           <input id="backgroundMode" type="checkbox" checked />
@@ -83,81 +176,49 @@
         </label>
       </section>
 
-      <section class="settings-grid" aria-label="設定">
-        <div class="setting">
-          <label for="mode">モード</label>
-          <select id="mode">
-            <option value="up">カウントアップ</option>
-            <option value="down">カウントダウン</option>
-          </select>
-        </div>
+      <details class="advanced-panel">
+        <summary>音声パック・VOICEVOXの詳細設定</summary>
+        <div class="advanced-content">
+          <section class="voice-card" aria-label="音声パックの管理">
+            <div>
+              <h2>ファイルから取り込む</h2>
+              <p>URLではなく、手元の <code>.ponvoice</code> を使う場合はこちらです。</p>
+            </div>
+            <div class="file-row">
+              <label class="file-button" for="packInput">ファイルを選ぶ</label>
+              <input id="packInput" type="file" accept=".ponvoice,application/json" />
+              <button id="clearPackBtn">削除</button>
+              <button id="testVoiceBtn">「1」を試聴</button>
+            </div>
+          </section>
 
-        <div class="setting target-setting">
-          <label id="targetSecondsLabel" for="targetSeconds">終了まで（秒）</label>
-          <input id="targetSeconds" type="number" min="1" max="86400" value="60" inputmode="numeric" />
-          <p id="targetSecondsHint" class="field-hint">カウントアップも、この秒数で自動終了します。例：300秒 = 5分</p>
+          <section class="voice-card" aria-label="VOICEVOX接続">
+            <div>
+              <h2>VOICEVOXローカル</h2>
+              <p id="voicevoxStatus">PCでVOICEVOX Engineを起動してから接続します。</p>
+            </div>
+            <div class="voicevox-row">
+              <input id="engineUrl" type="url" value="./voicevox" aria-label="VOICEVOX Engine URL" />
+              <button id="connectBtn">接続</button>
+            </div>
+            <div class="voicevox-row">
+              <select id="speakerSelect" aria-label="話者"></select>
+              <button id="prepareBtn">標準音声を準備</button>
+            </div>
+            <progress id="prepareProgress" value="0" max="76"></progress>
+          </section>
         </div>
-
-        <div class="setting">
-          <label for="intervalSeconds">読み上げ間隔</label>
-          <select id="intervalSeconds">
-            <option value="1">毎秒</option>
-            <option value="5">5秒ごと</option>
-            <option value="10">10秒ごと</option>
-            <option value="60">1分ごと</option>
-          </select>
-        </div>
-
-        <div class="setting">
-          <label for="audioSource">音声</label>
-          <select id="audioSource">
-            <option value="pack">音声パック</option>
-            <option value="voicevox">VOICEVOXローカル</option>
-            <option value="browser">ブラウザ音声</option>
-            <option value="silent">音なし</option>
-          </select>
-        </div>
-      </section>
-
-      <section class="voice-card" aria-label="音声パックの管理">
-        <div>
-          <h2>ファイルから音声パックを取り込む</h2>
-          <p>URLではなく、手元にある <code>.ponvoice</code> を使う場合はこちらです。</p>
-        </div>
-        <div class="file-row">
-          <label class="file-button" for="packInput">ファイルを選ぶ</label>
-          <input id="packInput" type="file" accept=".ponvoice,application/json" />
-          <button id="clearPackBtn">削除</button>
-          <button id="testVoiceBtn">「1」を試聴</button>
-        </div>
-      </section>
-
-      <section class="voice-card" aria-label="VOICEVOX接続">
-        <div>
-          <h2>VOICEVOXローカル</h2>
-          <p id="voicevoxStatus">PCでVOICEVOX Engineを起動してから接続します。</p>
-        </div>
-        <div class="voicevox-row">
-          <input id="engineUrl" type="url" value="./voicevox" aria-label="VOICEVOX Engine URL" />
-          <button id="connectBtn">接続</button>
-        </div>
-        <div class="voicevox-row">
-          <select id="speakerSelect" aria-label="話者"></select>
-          <button id="prepareBtn">標準音声を準備</button>
-        </div>
-        <progress id="prepareProgress" value="0" max="76"></progress>
-      </section>
+      </details>
 
       <section class="notes">
-        <h2>使い方と注意</h2>
+        <h2>使い方メモ</h2>
         <p>カウントアップは、設定した「終了まで」の秒数で自動停止します。終了時は、音声パックに含めた終了メッセージを読み上げます。</p>
         <p>iPhoneでは、音声パックを先に読み込み、アプリをホーム画面へ追加してから使うのがおすすめです。開始後は、画面ロック前に数秒再生されていることを確認してください。</p>
-        <p>バックグラウンド優先は、対応端末で音声セッションを「再生」として扱い、音声パックを30分先まで予約する実装です。電話・他アプリの音声・省電力設定などで止まる場合があります。</p>
         <p class="credit">VOICEVOXを使う場合は、公開や配布時に各音声ライブラリの利用規約を確認し、必要なクレジットを表示してください。</p>
       </section>
     </main>
 
     <audio id="backgroundAudio" playsinline preload="auto" aria-hidden="true"></audio>
-    <script src="./app.js?v=12" type="module"></script>
+    <script src="./app.js?v=20" type="module"></script>
   </body>
 </html>

@@ -3,29 +3,44 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101316" />
-    <title>音声パック作成</title>
-    <link rel="stylesheet" href="./styles.css?v=12" />
+    <meta name="theme-color" content="#74c84a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>ずんだボイス工房</title>
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="./styles.css?v=20" />
   </head>
-  <body>
+  <body class="maker-page" data-app-state="stopped">
     <main class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">VOICEVOX Engine</p>
-          <h1>音声パック作成</h1>
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <p class="eyebrow">VOICEVOXでつくる、あなただけの声</p>
+            <h1>ずんだボイス工房</h1>
+          </div>
         </div>
         <a class="tool-link" href="./index.html">カウントへ戻る</a>
       </header>
 
+      <section class="maker-hero" aria-labelledby="maker-hero-title">
+        <div>
+          <span class="step-kicker">音声パック作成</span>
+          <h2 id="maker-hero-title">数える声を、いい感じに仕立てるのだ。</h2>
+          <p>話者・速さ・終了メッセージを決めたら、PONVOICEにまとめてカウントアプリへ渡します。</p>
+        </div>
+        <div class="maker-orb" aria-hidden="true"><span></span><span></span><i></i></div>
+      </section>
+
       <section class="local-start-card" aria-labelledby="local-start-title">
         <div>
-          <p class="step-kicker">最初にここ</p>
+          <p class="step-kicker small">最初にここ</p>
           <h2 id="local-start-title">PCローカルで作成ツールを開く</h2>
-          <p><strong>VOICEVOXへ接続するのは、公開サイトやスマホではなくPC上のローカル画面からです。</strong>このフォルダ内の <code>start-voice-pack-maker.bat</code> をダブルクリックすると、接続確認後にこの画面が自動で開きます。</p>
+          <p><strong>VOICEVOXへ接続するのは、公開サイトやスマホではなくPC上のローカル画面からです。</strong>このフォルダ内の <code>START_HERE.bat</code> をダブルクリックすると、接続確認後にこの画面が自動で開きます。</p>
         </div>
         <ol class="local-start-steps">
           <li><span>1</span> VOICEVOXを起動</li>
-          <li><span>2</span> <code>start-voice-pack-maker.bat</code> を実行</li>
+          <li><span>2</span> <code>START_HERE.bat</code> を実行</li>
           <li><span>3</span> 自動で開いた画面で接続</li>
         </ol>
       </section>
@@ -42,64 +57,82 @@
         <pre id="diagnosticOutput" class="diagnostic-output" aria-live="polite">未診断です。</pre>
       </section>
 
-      <section class="voice-card">
+      <section class="voice-card maker-connection-card">
         <div>
           <h2>VOICEVOXへ接続</h2>
           <p id="status">PCローカル画面で「接続」を押してください。</p>
         </div>
         <div class="voicevox-row">
           <input id="engineUrl" type="url" value="./voicevox" aria-label="VOICEVOX 接続先（ローカル起動では自動プロキシ）" />
-          <button id="connectBtn">接続</button>
+          <button id="connectBtn" class="primary">接続する</button>
         </div>
       </section>
 
-      <section class="settings-grid maker-settings" aria-label="音声パック設定">
-        <div class="setting">
-          <label for="speakerSelect">話者</label>
-          <select id="speakerSelect" aria-label="話者"></select>
+      <section class="settings-card maker-settings-card" aria-labelledby="voice-setting-title">
+        <div class="settings-heading">
+          <div>
+            <span class="step-kicker small">声のレシピ</span>
+            <h2 id="voice-setting-title">どんな声にする？</h2>
+            <p>迷ったら、ずんだもん / ノーマル・standard・速度 1.35 から始めるのだ。</p>
+          </div>
+          <span class="settings-sprout" aria-hidden="true">✿</span>
         </div>
-        <div class="setting">
-          <label for="packSize">パック</label>
-          <select id="packSize">
-            <option value="core">core 最初の1分</option>
-            <option value="standard" selected>standard 1時間分</option>
-            <option value="full">full 24時間分</option>
-          </select>
-        </div>
-        <div class="setting">
-          <label for="speedScale">読み上げ速度</label>
-          <input id="speedScale" type="number" min="0.5" max="2" step="0.05" value="1.35" />
-        </div>
-        <div class="setting">
-          <label for="finishMessage">終了メッセージ</label>
-          <input id="finishMessage" maxlength="80" value="時間になったのだ" />
-          <p class="field-hint">カウント終了時に読み上げます。変更後は、新しいPONVOICEを作成してください。</p>
-        </div>
-        <div class="setting">
-          <label for="fileName">ファイル名</label>
-          <input id="fileName" value="poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice" />
+        <div class="settings-grid maker-settings" aria-label="音声パック設定">
+          <div class="setting">
+            <label for="speakerSelect">話者</label>
+            <select id="speakerSelect" aria-label="話者"></select>
+          </div>
+          <div class="setting">
+            <label for="packSize">パック</label>
+            <select id="packSize">
+              <option value="core">core 最初の1分</option>
+              <option value="standard" selected>standard 1時間分</option>
+              <option value="full">full 24時間分</option>
+            </select>
+          </div>
+          <div class="setting">
+            <label for="speedScale">読み上げ速度</label>
+            <input id="speedScale" type="number" min="0.5" max="2" step="0.05" value="1.35" />
+          </div>
+          <div class="setting">
+            <label for="finishMessage">終了メッセージ</label>
+            <input id="finishMessage" maxlength="80" value="時間になったのだ" />
+            <p class="field-hint">変更後は、新しいPONVOICEを作成してください。</p>
+          </div>
+          <div class="setting">
+            <label for="fileName">ファイル名</label>
+            <input id="fileName" value="poncount__zundamon-normal__standard__1.35__end-message__v02.ponvoice" />
+          </div>
         </div>
       </section>
 
       <section class="finish-card maker-finish-card" aria-labelledby="finish-guide-title">
-        <div>
-          <h2 id="finish-guide-title">終了メッセージの出力</h2>
-          <p>この欄の文言を、数え終わった直後に再生する専用クリップとして音声パックへ含めます。</p>
+        <div class="card-heading-wrap">
+          <span class="section-icon" aria-hidden="true">✦</span>
+          <div>
+            <h2 id="finish-guide-title">終わりのひとこと</h2>
+            <p>この欄の文言を、数え終わった直後に再生する専用クリップとしてパックへ含めます。</p>
+          </div>
         </div>
         <div class="finish-message-stack">
           <strong id="finishPreview">「時間になったのだ」</strong>
-          <button id="testFinishBtn">終了メッセージを試聴</button>
+          <button id="testFinishBtn">試聴する</button>
         </div>
       </section>
 
-      <section class="counter-panel">
+      <section class="maker-build-card" aria-label="音声パック作成">
+        <div class="maker-build-copy">
+          <span class="step-kicker small">仕上げ</span>
+          <h2>声をPONVOICEにまとめる</h2>
+          <p>作成が終わると、音声パックがダウンロードされます。</p>
+        </div>
         <div class="primary-actions maker-actions">
           <button id="createBtn" class="primary">作成して保存</button>
           <button id="testBtn">「1」を試聴</button>
           <button id="stopBtn">停止</button>
         </div>
         <progress id="progress" value="0" max="59"></progress>
-        <p id="progressText">未作成です。</p>
+        <p id="progressText" class="build-status">未作成です。</p>
       </section>
 
       <section class="notes">
@@ -109,6 +142,6 @@
       </section>
     </main>
 
-    <script type="module" src="./voice-pack-maker.js?v=12"></script>
+    <script type="module" src="./voice-pack-maker.js?v=20"></script>
   </body>
 </html>

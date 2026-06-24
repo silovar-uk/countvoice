@@ -1,12 +1,12 @@
 {
   "id": "./index.html",
-  "name": "毎秒カウント",
-  "short_name": "CountVoice",
+  "name": "ぽん、と数える",
+  "short_name": "ぽん数え",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#2ab14c",
-  "theme_color": "#2ab14c",
+  "background_color": "#effbea",
+  "theme_color": "#74c84a",
   "icons": [
     {
       "src": "./icons/icon-192.png",
