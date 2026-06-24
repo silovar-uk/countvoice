@@ -1,38 +1,34 @@
-# COUNT / VOICE
+# 毎秒カウント
 
-ブラウザだけで動く、音声読み上げ付きのカウントアプリです。
+VOICEVOXの音声を毎秒その場で生成せず、事前に作った音声をWeb Audioで再生するカウントアプリです。
 
 ## 使い方
 
-1. `index.html` をChrome / Edge / Safariなどのブラウザで開きます。
-2. 必要なら右上の設定から、声・速度・音量を選びます。
-3. 「カウント開始」を押します。
+1. `index.html` をブラウザで開きます。
+2. 安定して使う場合は `voice-pack-maker.html` で `.ponvoice` を作ります。
+3. スマホでは `.ponvoice` を送って、メイン画面の「取り込む」から読み込みます。
+4. 「開始」を押すと、指定した間隔で数字を読み上げます。
 
-> ブラウザの音声再生制限により、初回は必ずユーザー自身が開始ボタンを押してください。
+## VOICEVOXで音声を作る
 
-## 読み上げルール
+1. PCでVOICEVOX Engineを起動します。
+2. `voice-pack-maker.html` を開きます。
+3. `http://127.0.0.1:50021` に接続します。
+4. 話者、パックサイズ、読み上げ速度を選びます。
+5. 「作成して保存」で `.ponvoice` を保存します。
 
-- 1〜9秒: `1`〜`9`
-- 10 / 20 / 30 / 40 / 50秒: `10秒`〜`50秒`
-- 分ちょうど: `1分`、`2分`、`10分`…
-- 時間ちょうど: `1時間`、`2時間`…
-- 例: `1分10秒`では、`10秒`だけを読み上げます。
+標準パックはカウント用の呼び方を作ります。1〜9は数字だけ、10/20/30/40/50は「10秒」のように秒付き、分ぴったりは「1分」から「59分」まで、1時間ぴったりは「1時間」と読み上げます。
 
-## ファイル
+## ローカルで起動する
 
-- `index.html` : 画面構造とアクセシビリティ属性
-- `styles.css` : ダークUI、モバイル対応、安全領域、reduced motion対応
-- `app.js` : 状態管理、タイマー、SpeechSynthesis、設定保存
+PowerShellでこのフォルダを開き、次を実行します。
+
+```powershell
+.\start-server.ps1
+```
+
+その後、ブラウザで `http://127.0.0.1:8765/index.html` を開きます。
 
 ## 注意
 
-- 使える日本語音声と自然さは、端末・ブラウザごとに異なります。
-- 画面ロック中や別タブ中は、ブラウザがタイマーや音声を抑制する場合があります。
-- 復帰後は読み逃した節目をまとめて再生せず、次の節目から再開します。
-
-## 参考
-
-- Web Speech API: https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API
-- SpeechSynthesis: https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis
-- `role="timer"`: https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/timer_role
-- `prefers-reduced-motion`: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
+VOICEVOX音声を使う場合は、VOICEVOX本体と各音声ライブラリの利用規約を確認してください。公開や配布をする場合、必要なクレジット表記を入れてください。

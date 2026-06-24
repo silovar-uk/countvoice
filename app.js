@@ -1,510 +1,298 @@
-(() => {
-  "use strict";
+import { AudioStore, arrayBufferToBase64 } from "./audio.js?v=4";
+import { cueTextForSecond, cueTextsForPack } from "./count-format.js?v=4";
+import { deleteValue, getValue, setValue } from "./db.js?v=4";
 
-  const STORAGE_KEY = "count-voice-settings-v1";
-  const DEFAULT_SETTINGS = Object.freeze({
-    voiceURI: null,
-    rate: 1.25,
-    volume: 0.7,
-    isMuted: false
-  });
+const audioStore = new AudioStore();
+const state = {
+  running: false,
+  startedAt: 0,
+  pausedElapsed: 0,
+  nextSecond: 1,
+  timerId: null,
+  pack: null,
+  speakers: [],
+  selectedStyleId: null,
+};
 
-  const RATE_OPTIONS = [
-    { label: "ゆっくり", value: 1.0 },
-    { label: "標準", value: 1.25 },
-    { label: "速め", value: 1.5 }
-  ];
+const $ = (id) => document.getElementById(id);
 
-  const VOLUME_OPTIONS = [
-    { label: "小", value: 0.35 },
-    { label: "中", value: 0.7 },
-    { label: "大", value: 1.0 }
-  ];
+const els = {
+  countDisplay: $("countDisplay"),
+  modeLabel: $("modeLabel"),
+  unitLabel: $("unitLabel"),
+  startBtn: $("startBtn"),
+  pauseBtn: $("pauseBtn"),
+  resetBtn: $("resetBtn"),
+  mode: $("mode"),
+  targetSeconds: $("targetSeconds"),
+  intervalSeconds: $("intervalSeconds"),
+  audioSource: $("audioSource"),
+  packInput: $("packInput"),
+  clearPackBtn: $("clearPackBtn"),
+  testVoiceBtn: $("testVoiceBtn"),
+  packStatus: $("packStatus"),
+  engineUrl: $("engineUrl"),
+  connectBtn: $("connectBtn"),
+  speakerSelect: $("speakerSelect"),
+  prepareBtn: $("prepareBtn"),
+  prepareProgress: $("prepareProgress"),
+  voicevoxStatus: $("voicevoxStatus"),
+};
 
-  const els = {
-    app: document.querySelector(".app-shell"),
-    headerAction: document.querySelector("#header-action"),
-    primaryControls: document.querySelector("#primary-controls"),
-    modeLabel: document.querySelector("#mode-label"),
-    elapsedTime: document.querySelector("#elapsed-time"),
-    soundHint: document.querySelector("#sound-hint"),
-    appStatus: document.querySelector("#app-status"),
-    settingsDialog: document.querySelector("#settings-dialog"),
-    resetDialog: document.querySelector("#reset-dialog"),
-    closeSettings: document.querySelector("#close-settings"),
-    voiceSelect: document.querySelector("#voice-select"),
-    testVoice: document.querySelector("#test-voice"),
-    rateOptions: document.querySelector("#rate-options"),
-    volumeOptions: document.querySelector("#volume-options"),
-    cancelReset: document.querySelector("#cancel-reset"),
-    confirmReset: document.querySelector("#confirm-reset"),
-    resetCopy: document.querySelector("#reset-copy"),
-    settingsButtonTemplate: document.querySelector("#settings-button-template"),
-    soundButtonTemplate: document.querySelector("#sound-button-template")
-  };
+init();
 
-  const state = {
-    mode: "stopped", // stopped | running | paused
-    elapsedMs: 0,
-    startedAt: null,
-    timerId: null,
-    voices: [],
-    speechSupported: "speechSynthesis" in window && "SpeechSynthesisUtterance" in window,
-    pageVisible: document.visibilityState === "visible",
-    lastHandledSecond: -1,
-    lastSpokenSecond: -1,
-    lastDialogTrigger: null
-  };
+async function init() {
+  bindEvents();
+  await restorePack();
+  render();
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+}
 
-  let settings = loadSettings();
+function bindEvents() {
+  els.startBtn.addEventListener("click", start);
+  els.pauseBtn.addEventListener("click", pause);
+  els.resetBtn.addEventListener("click", reset);
+  els.mode.addEventListener("change", reset);
+  els.targetSeconds.addEventListener("change", reset);
+  els.packInput.addEventListener("change", importPack);
+  els.clearPackBtn.addEventListener("click", clearPack);
+  els.testVoiceBtn.addEventListener("click", () => speakCue("1"));
+  els.connectBtn.addEventListener("click", connectVoicevox);
+  els.prepareBtn.addEventListener("click", prepareVoicevoxClips);
+}
 
-  function init() {
-    renderSegmentedOptions();
-    hydrateVoices();
-    bindEvents();
-    render();
-    updateTimerDisplay(0);
+async function restorePack() {
+  const pack = await getValue("pack");
+  if (!pack) return;
+  state.pack = pack;
+  await audioStore.loadPack(pack);
+  els.packStatus.textContent = `${pack.meta?.name ?? "音声パック"} を読込済みです。`;
+}
 
-    if (!state.speechSupported) {
-      announceStatus("このブラウザでは音声読み上げを利用できません。カウント表示のみ利用できます。");
+async function start() {
+  if (els.audioSource.value !== "silent" && els.audioSource.value !== "browser") {
+    await audioStore.ensureContext();
+  }
+  if (state.running) return;
+  state.running = true;
+  state.startedAt = performance.now() - state.pausedElapsed * 1000;
+  state.nextSecond = Math.floor(state.pausedElapsed) + 1;
+  tick();
+}
+
+function pause() {
+  state.running = false;
+  clearTimeout(state.timerId);
+  state.pausedElapsed = elapsedSeconds();
+  render();
+}
+
+function reset() {
+  state.running = false;
+  clearTimeout(state.timerId);
+  state.pausedElapsed = 0;
+  state.nextSecond = 1;
+  render();
+}
+
+function tick() {
+  if (!state.running) return;
+  const elapsed = elapsedSeconds();
+  const target = targetSeconds();
+  const visible = els.mode.value === "down" ? Math.max(0, target - Math.floor(elapsed)) : Math.floor(elapsed);
+  els.countDisplay.textContent = visible;
+
+  while (state.nextSecond <= Math.floor(elapsed)) {
+    const countValue = els.mode.value === "down" ? Math.max(0, target - state.nextSecond) : state.nextSecond;
+    if (shouldSpeak(state.nextSecond, countValue)) {
+      speakCue(cueTextForSecond(countValue));
     }
+    state.nextSecond += 1;
   }
 
-  function bindEvents() {
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+  if (els.mode.value === "down" && elapsed >= target) {
+    state.running = false;
+    state.pausedElapsed = target;
+    speakCue("0");
+    render();
+    return;
+  }
 
-    if (state.speechSupported) {
-      window.speechSynthesis.addEventListener?.("voiceschanged", hydrateVoices);
+  state.timerId = setTimeout(tick, 80);
+}
+
+function elapsedSeconds() {
+  if (!state.running) return state.pausedElapsed;
+  return Math.max(0, (performance.now() - state.startedAt) / 1000);
+}
+
+function targetSeconds() {
+  return clamp(Number(els.targetSeconds.value) || 60, 1, 86400);
+}
+
+function shouldSpeak(second, countValue) {
+  const interval = Number(els.intervalSeconds.value) || 1;
+  return second % interval === 0 || countValue === 0;
+}
+
+async function speakCue(text) {
+  if (els.audioSource.value === "silent") return;
+  const key = String(text);
+  if (els.audioSource.value === "pack" || els.audioSource.value === "voicevox") {
+    const played = await audioStore.play(key);
+    if (played) return;
+  }
+  if (els.audioSource.value === "voicevox") {
+    const generated = await synthesizeAndCache(text).catch(() => null);
+    if (generated) {
+      await audioStore.play(key);
+      return;
     }
+  }
+  if (els.audioSource.value === "browser" || els.audioSource.value === "pack") {
+    browserSpeak(text);
+  }
+}
 
-    els.closeSettings.addEventListener("click", () => closeDialog(els.settingsDialog));
-    els.testVoice.addEventListener("click", () => {
-      speakText("カウントを開始します", { force: true });
-    });
+function browserSpeak(text) {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(String(text));
+  utterance.lang = "ja-JP";
+  utterance.rate = 1.2;
+  speechSynthesis.speak(utterance);
+}
 
-    els.voiceSelect.addEventListener("change", () => {
-      settings.voiceURI = els.voiceSelect.value || null;
-      saveSettings();
-      announceStatus("音声を変更しました");
-    });
+async function importPack(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const pack = JSON.parse(await file.text());
+  validatePack(pack);
+  state.pack = pack;
+  await setValue("pack", pack);
+  await audioStore.loadPack(pack);
+  els.packStatus.textContent = `${pack.meta?.name ?? file.name} を取り込みました。`;
+  els.audioSource.value = "pack";
+  event.target.value = "";
+}
 
-    els.cancelReset.addEventListener("click", () => closeDialog(els.resetDialog));
-    els.confirmReset.addEventListener("click", confirmReset);
+async function clearPack() {
+  state.pack = null;
+  audioStore.buffers.clear();
+  await deleteValue("pack");
+  els.packStatus.textContent = "音声パックは未読込です。";
+}
 
-    els.settingsDialog.addEventListener("click", (event) => {
-      if (event.target === els.settingsDialog) {
-        closeDialog(els.settingsDialog);
+function validatePack(pack) {
+  if (!pack || pack.kind !== "ponvoice" || !pack.clips) {
+    throw new Error("ponvoice形式ではありません。");
+  }
+}
+
+async function connectVoicevox() {
+  const baseUrl = cleanEngineUrl();
+  els.voicevoxStatus.textContent = "接続中...";
+  try {
+    const speakers = await fetchJson(`${baseUrl}/speakers`);
+    state.speakers = speakers;
+    fillSpeakerSelect(speakers);
+    els.voicevoxStatus.textContent = "接続しました。話者を選べます。";
+    return true;
+  } catch {
+    els.voicevoxStatus.textContent = "接続できませんでした。PCでVOICEVOX Engineを起動してください。";
+    return false;
+  }
+}
+
+function fillSpeakerSelect(speakers) {
+  els.speakerSelect.innerHTML = "";
+  for (const speaker of speakers) {
+    for (const style of speaker.styles) {
+      const option = document.createElement("option");
+      option.value = style.id;
+      option.textContent = `${speaker.name} / ${style.name}`;
+      if (speaker.name.includes("ずんだもん") && style.name.includes("ノーマル")) {
+        option.selected = true;
       }
-    });
-
-    // The reset dialog intentionally does not close on backdrop click.
-
-    [els.settingsDialog, els.resetDialog].forEach((dialog) => {
-      dialog.addEventListener("close", () => {
-        const trigger = state.lastDialogTrigger;
-        state.lastDialogTrigger = null;
-        if (trigger instanceof HTMLElement) {
-          requestAnimationFrame(() => trigger.focus());
-        }
-      });
-    });
-  }
-
-  function render() {
-    els.app.classList.toggle("is-running", state.mode === "running");
-    els.modeLabel.dataset.mode = state.mode;
-    els.modeLabel.textContent = getModeLabel();
-    els.soundHint.hidden = !(settings.isMuted && state.mode !== "running");
-
-    renderHeaderAction();
-    renderPrimaryControls();
-    updateTimerDisplay(getElapsedSeconds());
-  }
-
-  function renderHeaderAction() {
-    els.headerAction.replaceChildren();
-
-    if (state.mode === "running") {
-      const soundButton = els.soundButtonTemplate.content.firstElementChild.cloneNode(true);
-      const isSoundOn = !settings.isMuted;
-      soundButton.setAttribute("aria-pressed", String(isSoundOn));
-      soundButton.setAttribute("aria-label", isSoundOn ? "音声をオフにする" : "音声をオンにする");
-      soundButton.addEventListener("click", toggleMute);
-      els.headerAction.append(soundButton);
-      return;
-    }
-
-    const settingsButton = els.settingsButtonTemplate.content.firstElementChild.cloneNode(true);
-    settingsButton.addEventListener("click", (event) => openSettings(event.currentTarget));
-    els.headerAction.append(settingsButton);
-  }
-
-  function renderPrimaryControls() {
-    els.primaryControls.replaceChildren();
-
-    const primaryButton = document.createElement("button");
-    primaryButton.type = "button";
-    primaryButton.className = "primary-action";
-
-    if (state.mode === "stopped") {
-      primaryButton.textContent = "カウント開始";
-      primaryButton.addEventListener("click", startCount);
-    } else if (state.mode === "running") {
-      primaryButton.textContent = "一時停止";
-      primaryButton.addEventListener("click", pauseCount);
-    } else {
-      primaryButton.textContent = "再開";
-      primaryButton.addEventListener("click", resumeCount);
-    }
-
-    els.primaryControls.append(primaryButton);
-
-    if (state.mode === "paused") {
-      const resetButton = document.createElement("button");
-      resetButton.type = "button";
-      resetButton.className = "secondary-action";
-      resetButton.textContent = "リセット";
-      resetButton.addEventListener("click", (event) => openResetDialog(event.currentTarget));
-      els.primaryControls.append(resetButton);
+      els.speakerSelect.append(option);
     }
   }
+  state.selectedStyleId = Number(els.speakerSelect.value);
+}
 
-  function renderSegmentedOptions() {
-    renderSegmentedGroup(els.rateOptions, RATE_OPTIONS, settings.rate, "rate");
-    renderSegmentedGroup(els.volumeOptions, VOLUME_OPTIONS, settings.volume, "volume");
+async function prepareVoicevoxClips() {
+  if (!els.speakerSelect.value && !(await connectVoicevox())) return;
+  const clips = {};
+  const cueTexts = cueTextsForPack("standard");
+  els.prepareProgress.max = cueTexts.length;
+  els.prepareProgress.value = 0;
+  for (const [index, text] of cueTexts.entries()) {
+    const buffer = await synthesizeVoicevox(text, Number(els.speakerSelect.value));
+    clips[text] = arrayBufferToBase64(buffer);
+    await audioStore.decodeClip(text, buffer);
+    els.prepareProgress.value = index + 1;
   }
+  const pack = {
+    kind: "ponvoice",
+    version: 1,
+    meta: {
+      name: "VOICEVOX count standard",
+      createdAt: new Date().toISOString(),
+      speakerStyleId: Number(els.speakerSelect.value),
+      credit: "VOICEVOX",
+    },
+    clips,
+  };
+  state.pack = pack;
+  await setValue("pack", pack);
+  els.audioSource.value = "voicevox";
+  els.packStatus.textContent = "0〜59秒の音声を準備しました。";
+}
 
-  function renderSegmentedGroup(container, options, selectedValue, key) {
-    container.replaceChildren();
+async function synthesizeAndCache(text) {
+  const buffer = await synthesizeVoicevox(String(text), Number(els.speakerSelect.value));
+  await audioStore.decodeClip(text, buffer);
+  const pack = state.pack ?? { kind: "ponvoice", version: 1, meta: { name: "local cache" }, clips: {} };
+  pack.clips[String(text)] = arrayBufferToBase64(buffer);
+  state.pack = pack;
+  await setValue("pack", pack);
+  return true;
+}
 
-    for (const option of options) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "segment-button";
-      button.textContent = option.label;
-      button.dataset.value = String(option.value);
-      button.setAttribute("aria-pressed", String(option.value === selectedValue));
-      button.addEventListener("click", () => {
-        settings[key] = option.value;
-        saveSettings();
-        renderSegmentedOptions();
-        announceStatus(`${key === "rate" ? "音声速度" : "音声音量"}を${option.label}に変更しました`);
-      });
-      container.append(button);
-    }
-  }
+async function synthesizeVoicevox(text, speakerId) {
+  const baseUrl = cleanEngineUrl();
+  const query = await fetchJson(`${baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`, {
+    method: "POST",
+  });
+  const response = await fetch(`${baseUrl}/synthesis?speaker=${speakerId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(query),
+  });
+  if (!response.ok) throw new Error("VOICEVOX synthesis failed");
+  return response.arrayBuffer();
+}
 
-  function startCount() {
-    state.mode = "running";
-    state.elapsedMs = 0;
-    state.startedAt = Date.now();
-    state.lastHandledSecond = -1;
-    state.lastSpokenSecond = -1;
-    startTicker();
-    render();
-    announceStatus("カウントを開始しました");
-  }
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
 
-  function pauseCount() {
-    if (state.mode !== "running") return;
+function cleanEngineUrl() {
+  return els.engineUrl.value.replace(/\/$/, "");
+}
 
-    state.elapsedMs = getElapsedMs();
-    state.startedAt = null;
-    state.mode = "paused";
-    stopTicker();
-    cancelSpeech();
-    render();
-    announceStatus("カウントを一時停止しました");
-  }
+function render() {
+  const target = targetSeconds();
+  const elapsed = Math.floor(elapsedSeconds());
+  els.modeLabel.textContent = els.mode.value === "down" ? "カウントダウン" : "カウントアップ";
+  els.unitLabel.textContent = "秒";
+  els.countDisplay.textContent = els.mode.value === "down" ? Math.max(0, target - elapsed) : elapsed;
+}
 
-  function resumeCount() {
-    if (state.mode !== "paused") return;
-
-    state.mode = "running";
-    state.startedAt = Date.now();
-    state.lastHandledSecond = getElapsedSeconds();
-    startTicker();
-    render();
-    announceStatus("カウントを再開しました");
-  }
-
-  function openResetDialog(trigger) {
-    const seconds = getElapsedSeconds();
-    els.resetCopy.textContent = `${formatSpokenDuration(seconds)}のカウントをリセットしますか？`;
-    openDialog(els.resetDialog, trigger);
-  }
-
-  function confirmReset() {
-    closeDialog(els.resetDialog);
-    stopTicker();
-    cancelSpeech();
-    state.mode = "stopped";
-    state.elapsedMs = 0;
-    state.startedAt = null;
-    state.lastHandledSecond = -1;
-    state.lastSpokenSecond = -1;
-    render();
-    announceStatus("カウントをリセットしました");
-  }
-
-  function toggleMute() {
-    settings.isMuted = !settings.isMuted;
-    saveSettings();
-
-    if (settings.isMuted) {
-      cancelSpeech();
-      announceStatus("音声をオフにしました");
-    } else {
-      announceStatus("音声をオンにしました");
-    }
-
-    render();
-  }
-
-  function startTicker() {
-    stopTicker();
-    tick();
-    state.timerId = window.setInterval(tick, 180);
-  }
-
-  function stopTicker() {
-    if (state.timerId !== null) {
-      window.clearInterval(state.timerId);
-      state.timerId = null;
-    }
-  }
-
-  function tick() {
-    const elapsedSeconds = getElapsedSeconds();
-    updateTimerDisplay(elapsedSeconds);
-
-    if (elapsedSeconds === state.lastHandledSecond) return;
-    state.lastHandledSecond = elapsedSeconds;
-
-    if (state.mode !== "running" || !state.pageVisible) return;
-
-    const announcement = getAnnouncement(elapsedSeconds);
-    if (!announcement || elapsedSeconds === state.lastSpokenSecond) return;
-
-    state.lastSpokenSecond = elapsedSeconds;
-    speakText(announcement);
-  }
-
-  function getElapsedMs() {
-    if (state.mode === "running" && state.startedAt !== null) {
-      return state.elapsedMs + (Date.now() - state.startedAt);
-    }
-    return state.elapsedMs;
-  }
-
-  function getElapsedSeconds() {
-    return Math.floor(getElapsedMs() / 1000);
-  }
-
-  function getAnnouncement(totalSeconds) {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (totalSeconds >= 1 && totalSeconds <= 9) return String(totalSeconds);
-
-    if (totalSeconds > 0 && hours > 0 && minutes === 0 && seconds === 0) {
-      return `${hours}時間`;
-    }
-
-    if (totalSeconds > 0 && seconds === 0) {
-      return `${minutes}分`;
-    }
-
-    if (seconds > 0 && seconds % 10 === 0) {
-      return `${seconds}秒`;
-    }
-
-    return null;
-  }
-
-  function speakText(text, { force = false } = {}) {
-    if (!state.speechSupported || (!force && settings.isMuted) || !text) return;
-
-    const synth = window.speechSynthesis;
-    cancelSpeech();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "ja-JP";
-    utterance.rate = settings.rate;
-    utterance.volume = settings.volume;
-    utterance.pitch = 1;
-
-    const selectedVoice = state.voices.find((voice) => voice.voiceURI === settings.voiceURI);
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
-
-    // Some mobile browsers can briefly report an interrupted state after cancel().
-    // The zero-delay task lets the cancellation settle before the current cue starts.
-    window.setTimeout(() => {
-      if (!force && (state.mode !== "running" || !state.pageVisible || settings.isMuted)) return;
-      synth.speak(utterance);
-    }, 0);
-  }
-
-  function cancelSpeech() {
-    if (state.speechSupported) {
-      window.speechSynthesis.cancel();
-    }
-  }
-
-  function hydrateVoices() {
-    if (!state.speechSupported) {
-      els.voiceSelect.innerHTML = "<option value=\"\">このブラウザでは音声を利用できません</option>";
-      els.voiceSelect.disabled = true;
-      els.testVoice.disabled = true;
-      return;
-    }
-
-    const allVoices = window.speechSynthesis.getVoices();
-    const japaneseVoices = allVoices.filter((voice) => voice.lang.toLowerCase().startsWith("ja"));
-    state.voices = japaneseVoices.length > 0 ? japaneseVoices : allVoices;
-
-    els.voiceSelect.replaceChildren();
-
-    if (state.voices.length === 0) {
-      const option = new Option("音声を読み込み中…", "");
-      els.voiceSelect.add(option);
-      els.voiceSelect.disabled = true;
-      els.testVoice.disabled = true;
-      return;
-    }
-
-    els.voiceSelect.disabled = false;
-    els.testVoice.disabled = false;
-
-    const preferredVoice = state.voices.find((voice) => voice.voiceURI === settings.voiceURI);
-    const defaultVoice = preferredVoice || state.voices.find((voice) => voice.default) || state.voices[0];
-
-    if (!settings.voiceURI || !preferredVoice) {
-      settings.voiceURI = defaultVoice.voiceURI;
-      saveSettings();
-    }
-
-    for (const voice of state.voices) {
-      const source = voice.localService ? "端末" : "ネットワーク";
-      const option = new Option(`${voice.name}（${voice.lang}・${source}）`, voice.voiceURI, false, voice.voiceURI === settings.voiceURI);
-      els.voiceSelect.add(option);
-    }
-  }
-
-  function openSettings(trigger) {
-    hydrateVoices();
-    openDialog(els.settingsDialog, trigger);
-  }
-
-  function openDialog(dialog, trigger) {
-    state.lastDialogTrigger = trigger;
-
-    if (typeof dialog.showModal === "function") {
-      if (!dialog.open) dialog.showModal();
-      return;
-    }
-
-    dialog.setAttribute("open", "");
-  }
-
-  function closeDialog(dialog) {
-    if (typeof dialog.close === "function" && dialog.open) {
-      dialog.close();
-      return;
-    }
-
-    dialog.removeAttribute("open");
-    const trigger = state.lastDialogTrigger;
-    state.lastDialogTrigger = null;
-    if (trigger instanceof HTMLElement) trigger.focus();
-  }
-
-  function handleVisibilityChange() {
-    state.pageVisible = document.visibilityState === "visible";
-
-    if (!state.pageVisible) {
-      cancelSpeech();
-      return;
-    }
-
-    // Do not replay missed milestones after returning from another tab/app.
-    const currentSecond = getElapsedSeconds();
-    state.lastHandledSecond = currentSecond;
-    state.lastSpokenSecond = currentSecond;
-    updateTimerDisplay(currentSecond);
-  }
-
-  function updateTimerDisplay(totalSeconds) {
-    const visual = formatClock(totalSeconds);
-    els.elapsedTime.querySelector("span").textContent = visual;
-    els.elapsedTime.dataset.hasHours = String(totalSeconds >= 3600);
-    els.elapsedTime.setAttribute("datetime", `PT${totalSeconds}S`);
-    els.elapsedTime.setAttribute("aria-label", `経過時間 ${formatSpokenDuration(totalSeconds)}`);
-  }
-
-  function formatClock(totalSeconds) {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    const two = (value) => String(value).padStart(2, "0");
-    return hours > 0 ? `${two(hours)}:${two(minutes)}:${two(seconds)}` : `${two(minutes)}:${two(seconds)}`;
-  }
-
-  function formatSpokenDuration(totalSeconds) {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    const units = [];
-
-    if (hours > 0) units.push(`${hours}時間`);
-    if (minutes > 0) units.push(`${minutes}分`);
-    if (seconds > 0 || units.length === 0) units.push(`${seconds}秒`);
-
-    return units.join("");
-  }
-
-  function getModeLabel() {
-    if (state.mode === "running") return "カウント中";
-    if (state.mode === "paused") return "一時停止中";
-    return "準備完了";
-  }
-
-  function announceStatus(message) {
-    // Clearing then setting helps repeated messages be announced consistently.
-    els.appStatus.textContent = "";
-    window.setTimeout(() => {
-      els.appStatus.textContent = message;
-    }, 20);
-  }
-
-  function loadSettings() {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (!stored) return { ...DEFAULT_SETTINGS };
-
-      const parsed = JSON.parse(stored);
-      return {
-        voiceURI: typeof parsed.voiceURI === "string" ? parsed.voiceURI : null,
-        rate: RATE_OPTIONS.some((item) => item.value === parsed.rate) ? parsed.rate : DEFAULT_SETTINGS.rate,
-        volume: VOLUME_OPTIONS.some((item) => item.value === parsed.volume) ? parsed.volume : DEFAULT_SETTINGS.volume,
-        isMuted: typeof parsed.isMuted === "boolean" ? parsed.isMuted : DEFAULT_SETTINGS.isMuted
-      };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
-  }
-
-  function saveSettings() {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    } catch {
-      // Private browsing or storage-disabled environments can still use the app for this session.
-    }
-  }
-
-  init();
-})();
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
