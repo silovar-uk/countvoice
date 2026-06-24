@@ -5,7 +5,9 @@ import { deleteValue, getValue, setValue } from "./db.js";
 const BACKGROUND_LOOKAHEAD_SECONDS = 30 * 60;
 const FOREGROUND_LOOKAHEAD_SECONDS = 8;
 const TICK_INTERVAL_MS = 80;
-const FINISH_GAP_SECONDS = 0.1;
+const FINISH_GAP_SECONDS = 0.18;
+const FINISH_REPEAT_GAP_SECONDS = 0.42;
+const FINISH_PLAY_COUNT = 2;
 
 const $ = (id) => document.getElementById(id);
 
@@ -62,10 +64,15 @@ const state = {
   nextFallbackSecond: 1,
   scheduledUntilSecond: 0,
   scheduledSources: new Set(),
+  cancelledSources: new WeakSet(),
+  finishSources: new Set(),
   finishScheduled: false,
   finishPlayed: false,
+  finishPlayedCount: 0,
   finishSource: null,
   finishCleanupTimer: null,
+  finishGeneration: 0,
+  finishSequencePromise: null,
   audioNeedsRecovery: false,
   audioRecoveryInFlight: false,
   audioReschedulePromise: null,
@@ -224,19 +231,30 @@ function completeCount() {
   render();
 
   const message = finishMessageText();
-  if (usesBufferedPack() && state.finishScheduled) {
-    updateBackgroundStatus(`終了しました。${message} を読み上げます。`);
-    setMediaSessionState("playing");
-    if (state.finishPlayed) finishPlaybackAfterMessage();
+  setMediaSessionState("playing");
+
+  // 画面が見えている通常終了では、直前に予約した音声の成否へ任せず、
+  // 終了専用の2回読み上げシーケンスを今から確実に組み直す。
+  if (document.visibilityState === "visible") {
+    playFinishSequenceNow({ restart: true }).catch(() => {
+      playBrowserFinishFallback(message);
+    });
+    updateBackgroundStatus(`終了しました。${message} を2回読み上げます。`);
     return;
   }
 
-  // 旧パックなど、終了メッセージを含まない場合の保険。
-  // 画面表示中はブラウザ音声 / ローカルVOICEVOXで読むことがありますが、
-  // iPhoneバックグラウンドで確実に鳴らすには新しいPONVOICEが必要です。
-  speakCueNow(message).catch(() => {});
-  updateBackgroundStatus(`終了しました。${message} を読み上げました。`);
-  deferFinishPlayback(2200);
+  // バックグラウンドでは、開始時に予約した2回分の音声を優先する。
+  // 予約が存在しない場合だけ、フォアグラウンド復帰時に再生できるよう状態を残す。
+  if (usesBufferedPack() && state.finishScheduled) {
+    updateBackgroundStatus(`終了しました。${message} を2回読み上げます。`);
+    if (state.finishPlayedCount >= FINISH_PLAY_COUNT) finishPlaybackAfterMessage();
+    return;
+  }
+
+  playFinishSequenceNow({ restart: true }).catch(() => {
+    playBrowserFinishFallback(message);
+  });
+  updateBackgroundStatus(`終了しました。${message} を2回読み上げます。`);
 }
 
 function elapsedSeconds() {
@@ -293,41 +311,132 @@ async function scheduleAudioAhead() {
 }
 
 async function scheduleFinishMessage(contextNow, scheduleFromElapsed, target) {
-  if (state.finishScheduled || state.finishPlayed) return;
+  if (state.finishScheduled || state.finishPlayedCount >= FINISH_PLAY_COUNT) return;
 
   const message = finishMessageText();
   if (!audioStore.has(message)) return;
 
+  const generation = state.finishGeneration;
   const finalCountValue = countValueAtSecond(target, target);
   const finalCountText = shouldSpeak(target, finalCountValue) ? cueTextForSecond(finalCountValue) : null;
   const finalCountDuration = finalCountText && audioStore.has(finalCountText)
     ? audioStore.duration(finalCountText)
     : 0;
-  const finishWhen = contextNow
+  const firstWhen = contextNow
     + Math.max(0.05, target - scheduleFromElapsed)
     + finalCountDuration
     + FINISH_GAP_SECONDS;
+  const finishDuration = audioStore.duration(message);
+  const secondWhen = firstWhen + finishDuration + FINISH_REPEAT_GAP_SECONDS;
 
-  const source = await audioStore.schedule(message, finishWhen);
-  if (!source) return;
+  const first = await audioStore.schedule(message, firstWhen);
+  if (!first) return;
+  if (generation !== state.finishGeneration) {
+    cancelAudioSource(first);
+    return;
+  }
+
+  const second = await audioStore.schedule(message, secondWhen);
+  if (!second || generation !== state.finishGeneration) {
+    cancelAudioSource(first);
+    if (second) cancelAudioSource(second);
+    return;
+  }
 
   state.finishScheduled = true;
-  state.finishSource = source;
-  rememberScheduledSource(source, true);
+  state.finishPlayed = false;
+  state.finishPlayedCount = 0;
+  state.finishSource = first;
+  state.finishSources.add(first);
+  state.finishSources.add(second);
+  rememberScheduledSource(first, true);
+  rememberScheduledSource(second, true);
 }
 
 function rememberScheduledSource(source, isFinishMessage = false) {
   state.scheduledSources.add(source);
   source.addEventListener("ended", () => {
     state.scheduledSources.delete(source);
-    if (!isFinishMessage) return;
+    if (!isFinishMessage || state.cancelledSources.has(source)) return;
 
-    state.finishPlayed = true;
-    state.finishSource = null;
-    if (state.completed && !state.running) {
+    state.finishSources.delete(source);
+    state.finishPlayedCount += 1;
+    state.finishPlayed = state.finishPlayedCount >= FINISH_PLAY_COUNT;
+    if (state.finishPlayed) state.finishSource = null;
+    if (state.completed && !state.running && state.finishPlayed) {
       finishPlaybackAfterMessage();
     }
   }, { once: true });
+}
+
+async function playFinishSequenceNow({ restart = false, userGesture = false, includeFinalCount = true } = {}) {
+  const message = finishMessageText();
+  if (!usesBufferedPack() || !audioStore.has(message)) {
+    playBrowserFinishFallback(message);
+    return;
+  }
+
+  if (state.finishSequencePromise && !restart) return state.finishSequencePromise;
+  if (restart) cancelFinishReservations();
+
+  const generation = state.finishGeneration;
+  const job = (async () => {
+    if (userGesture) {
+      await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
+    } else {
+      await audioStore.ensureContext({ resume: true, preferMediaElement: Boolean(els.backgroundMode.checked) });
+    }
+
+    if (generation !== state.finishGeneration) return;
+
+    const target = targetSeconds();
+    const finalCountValue = countValueAtSecond(target, target);
+    const finalCountText = includeFinalCount && shouldSpeak(target, finalCountValue)
+      ? cueTextForSecond(finalCountValue)
+      : null;
+    const finalCountDuration = finalCountText && audioStore.has(finalCountText)
+      ? audioStore.duration(finalCountText)
+      : 0;
+    const messageDuration = audioStore.duration(message);
+    const firstWhen = audioStore.currentTime + Math.max(0.06, finalCountDuration + FINISH_GAP_SECONDS);
+    const secondWhen = firstWhen + messageDuration + FINISH_REPEAT_GAP_SECONDS;
+
+    const first = await audioStore.schedule(message, firstWhen);
+    if (!first || generation !== state.finishGeneration) {
+      if (first) cancelAudioSource(first);
+      return;
+    }
+
+    const second = await audioStore.schedule(message, secondWhen);
+    if (!second || generation !== state.finishGeneration) {
+      cancelAudioSource(first);
+      if (second) cancelAudioSource(second);
+      return;
+    }
+
+    state.finishScheduled = true;
+    state.finishPlayed = false;
+    state.finishPlayedCount = 0;
+    state.finishSource = first;
+    state.finishSources.add(first);
+    state.finishSources.add(second);
+    rememberScheduledSource(first, true);
+    rememberScheduledSource(second, true);
+  })();
+
+  state.finishSequencePromise = job;
+  try {
+    await job;
+  } finally {
+    if (state.finishSequencePromise === job) state.finishSequencePromise = null;
+  }
+}
+
+function playBrowserFinishFallback(message) {
+  if (els.audioSource.value === "silent") return;
+  browserSpeak(message);
+  window.setTimeout(() => browserSpeak(message), 1550);
+  deferFinishPlayback(3600);
 }
 
 async function playFallbackCues(elapsedFloor) {
@@ -345,25 +454,47 @@ async function playFallbackCues(elapsedFloor) {
   }
 }
 
+function cancelAudioSource(source) {
+  if (!source) return;
+  state.cancelledSources.add(source);
+  try { source.stop(); } catch { /* already ended */ }
+}
+
+function cancelFinishReservations() {
+  state.finishGeneration += 1;
+  for (const source of state.finishSources) {
+    cancelAudioSource(source);
+    state.scheduledSources.delete(source);
+  }
+  state.finishSources.clear();
+  state.finishScheduled = false;
+  state.finishPlayed = false;
+  state.finishPlayedCount = 0;
+  state.finishSource = null;
+}
+
 function stopScheduledAudio() {
   clearTimeout(state.finishCleanupTimer);
   state.finishCleanupTimer = null;
+  state.finishSequencePromise = null;
+  state.finishGeneration += 1;
+
+  for (const source of state.scheduledSources) {
+    cancelAudioSource(source);
+  }
+  state.scheduledSources.clear();
+  state.finishSources.clear();
   state.finishSource = null;
   state.finishScheduled = false;
   state.finishPlayed = false;
-
-  for (const source of state.scheduledSources) {
-    try { source.stop(); } catch { /* already ended */ }
-  }
-  state.scheduledSources.clear();
+  state.finishPlayedCount = 0;
 }
 
 function clearFinishState() {
   clearTimeout(state.finishCleanupTimer);
   state.finishCleanupTimer = null;
-  state.finishScheduled = false;
-  state.finishPlayed = false;
-  state.finishSource = null;
+  state.finishSequencePromise = null;
+  cancelFinishReservations();
 }
 
 async function handleVisibilityChange() {
@@ -456,15 +587,23 @@ async function recoverAudioFromUserAction() {
     if (usesBufferedPack()) {
       const ready = await prepareAudioForUserAction();
       if (!ready) return;
-      if (state.running) await rescheduleAudioFromCurrentPosition({ clearRecovery: true });
+      if (state.running) {
+        await rescheduleAudioFromCurrentPosition({ clearRecovery: true });
+      } else if (state.completed) {
+        await playFinishSequenceNow({ restart: true, userGesture: true });
+        setAudioRecoveryNeeded(false);
+      }
     } else {
       resumeBrowserSpeech();
+      if (state.completed) playBrowserFinishFallback(finishMessageText());
       setAudioRecoveryNeeded(false);
     }
 
     updateBackgroundStatus(state.running
       ? "音を復帰しました。今の秒数から読み上げ直します。"
-      : "音を復帰しました。開始すると音声を再生します。");
+      : state.completed
+        ? "終了メッセージを2回、もう一度読み上げます。"
+        : "音を復帰しました。開始すると音声を再生します。");
   } finally {
     state.audioRecoveryInFlight = false;
     els.resumeAudioBtn.disabled = false;
@@ -538,14 +677,11 @@ async function playTestCue() {
 
 async function playFinishTest() {
   const message = finishMessageText();
-  if (usesBufferedPack()) {
-    await audioStore.resumeForUserGesture({ preferMediaElement: Boolean(els.backgroundMode.checked) });
-    if (audioStore.has(message)) {
-      await audioStore.play(message);
-      return;
-    }
+  if (usesBufferedPack() && audioStore.has(message)) {
+    await playFinishSequenceNow({ restart: true, userGesture: true, includeFinalCount: false });
+    return;
   }
-  await speakCueNow(message);
+  playBrowserFinishFallback(message);
 }
 
 async function speakCueNow(text) {
@@ -769,8 +905,8 @@ function updateCounterUI(elapsed, target) {
 
   document.body.dataset.appState = viewState;
   els.modeLabel.textContent = mode === "down" ? "カウントダウン" : "カウントアップ";
-  els.unitLabel.textContent = "秒";
-  els.countDisplay.textContent = visible;
+  els.unitLabel.textContent = "HH:MM:SS";
+  els.countDisplay.textContent = formatClock(visible);
   els.countDisplay.setAttribute("aria-label", timerAriaLabel(visible));
   els.sessionProgress.max = target;
   els.sessionProgress.value = Math.min(elapsed, target);
@@ -813,7 +949,25 @@ function visibleValue(elapsed, target) {
 }
 
 function timerAriaLabel(value) {
-  return `${els.mode.value === "down" ? "残り" : "経過"}時間 ${value}秒`;
+  return `${els.mode.value === "down" ? "残り" : "経過"} ${formatClockSpeech(value)}`;
+}
+
+function formatClock(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remain = seconds % 60;
+  return [hours, minutes, remain]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function formatClockSpeech(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remain = seconds % 60;
+  return `${hours}時間${minutes}分${remain}秒`;
 }
 
 function updateTargetCopy() {
@@ -853,7 +1007,7 @@ function updateFinishMessageUI() {
   }
 
   if (audioStore.has(message)) {
-    els.finishMessageStatus.textContent = "この音声パックには、終了メッセージの音声が入っています。終了時に予約再生します。";
+    els.finishMessageStatus.textContent = "この音声パックには、終了メッセージの音声が入っています。終了時に2回読み上げます。";
     return;
   }
 
@@ -918,7 +1072,7 @@ function finishPlaybackAfterMessage() {
   state.finishCleanupTimer = null;
   audioStore.pauseMediaBridge();
   setMediaSessionState("none");
-  updateBackgroundStatus(`終了しました。${finishMessageText()} を読み上げました。`);
+  updateBackgroundStatus(`終了しました。${finishMessageText()} を2回読み上げました。`);
 }
 
 function updateBackgroundStatus(message = "") {

@@ -479,17 +479,28 @@ h2 {
 }
 
 .readout-copy {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
   display: grid;
+  grid-template-rows: auto auto auto;
+  place-content: center;
   justify-items: center;
-  gap: 4px;
-  padding: 26px 90px 28px;
+  gap: 7px;
+  padding: 26px 32px 28px;
 }
 
 .readout strong {
+  display: block;
+  width: 8ch;
+  max-width: 100%;
   color: #2d7628;
-  font-size: clamp(6rem, 24vw, 12rem);
-  line-height: 0.84;
-  letter-spacing: -0.09em;
+  font-size: clamp(3.25rem, 17vw, 7.8rem);
+  line-height: 0.88;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
   text-shadow: 0 7px 0 rgba(91, 173, 60, 0.08);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -502,7 +513,7 @@ h2 {
   letter-spacing: 0.06em;
 }
 
-#unitLabel { font-size: 1.02rem; letter-spacing: 0.02em; }
+#unitLabel { font-size: 0.76rem; letter-spacing: 0.12em; color: #5f8f58; }
 
 .readout-orbit {
   position: absolute;
@@ -889,6 +900,298 @@ h2 {
 .maker-actions { grid-template-columns: 1.3fr 1fr 0.8fr; }
 .build-status { margin: 10px 0 0; color: #587953; font-weight: 800; }
 
+/* カウント中は、余計な情報をしまって数字に集中する画面へ */
+body[data-app-state="running"],
+body[data-app-state="paused"],
+body[data-app-state="completed"] {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(183, 240, 115, 0.54), transparent 32rem),
+    radial-gradient(circle at 90% 92%, rgba(255, 223, 110, 0.26), transparent 26rem),
+    linear-gradient(180deg, #f8fff5 0%, #e6f8df 100%);
+}
+
+body[data-app-state="running"] .app-shell,
+body[data-app-state="paused"] .app-shell,
+body[data-app-state="completed"] .app-shell {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
+body[data-app-state="running"] .topbar,
+body[data-app-state="running"] .quick-load-card,
+body[data-app-state="running"] .finish-card,
+body[data-app-state="running"] .settings-card,
+body[data-app-state="running"] .background-card,
+body[data-app-state="running"] .advanced-panel,
+body[data-app-state="running"] .notes,
+body[data-app-state="paused"] .topbar,
+body[data-app-state="paused"] .quick-load-card,
+body[data-app-state="paused"] .finish-card,
+body[data-app-state="paused"] .settings-card,
+body[data-app-state="paused"] .background-card,
+body[data-app-state="paused"] .advanced-panel,
+body[data-app-state="paused"] .notes,
+body[data-app-state="completed"] .topbar,
+body[data-app-state="completed"] .quick-load-card,
+body[data-app-state="completed"] .finish-card,
+body[data-app-state="completed"] .settings-card,
+body[data-app-state="completed"] .background-card,
+body[data-app-state="completed"] .advanced-panel,
+body[data-app-state="completed"] .notes {
+  display: none;
+}
+
+body[data-app-state="running"] .counter-panel,
+body[data-app-state="paused"] .counter-panel,
+body[data-app-state="completed"] .counter-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding:
+    calc(18px + env(safe-area-inset-top))
+    clamp(18px, 5vw, 58px)
+    calc(18px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(255,255,255,0.82) 0 17%, rgba(238,252,227,0.72) 46%, rgba(213,244,197,0.88) 100%);
+}
+
+body[data-app-state="running"] .counter-panel::before,
+body[data-app-state="paused"] .counter-panel::before,
+body[data-app-state="completed"] .counter-panel::before {
+  width: min(52vw, 46rem);
+  height: min(52vw, 46rem);
+  left: -18rem;
+  top: auto;
+  bottom: -20rem;
+  background: rgba(181, 237, 109, 0.28);
+}
+
+body[data-app-state="running"] .counter-panel::after,
+body[data-app-state="paused"] .counter-panel::after,
+body[data-app-state="completed"] .counter-panel::after {
+  width: min(42vw, 38rem);
+  height: min(42vw, 38rem);
+  right: -16rem;
+  top: -17rem;
+  background: rgba(255, 226, 117, 0.24);
+}
+
+body[data-app-state="running"] .counter-panel-header,
+body[data-app-state="paused"] .counter-panel-header,
+body[data-app-state="completed"] .counter-panel-header,
+body[data-app-state="running"] .session-meter,
+body[data-app-state="paused"] .session-meter,
+body[data-app-state="completed"] .session-meter,
+body[data-app-state="running"] .cheer-message,
+body[data-app-state="paused"] .cheer-message,
+body[data-app-state="completed"] .cheer-message,
+body[data-app-state="running"] .primary-actions,
+body[data-app-state="paused"] .primary-actions,
+body[data-app-state="completed"] .primary-actions,
+body[data-app-state="running"] .audio-recovery,
+body[data-app-state="paused"] .audio-recovery,
+body[data-app-state="completed"] .audio-recovery {
+  width: min(100%, 880px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body[data-app-state="running"] .counter-panel-header,
+body[data-app-state="paused"] .counter-panel-header,
+body[data-app-state="completed"] .counter-panel-header {
+  margin-bottom: 12px;
+}
+
+body[data-app-state="running"] .readout,
+body[data-app-state="paused"] .readout,
+body[data-app-state="completed"] .readout {
+  flex: 1 1 auto;
+  width: min(100%, 1040px);
+  min-height: clamp(290px, 54dvh, 760px);
+  margin: 0 auto;
+  border-radius: clamp(30px, 5vw, 58px);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255,255,255,0.96) 0 22%, rgba(238,252,226,0.8) 54%, rgba(196,235,170,0.88) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.74), 0 20px 44px rgba(68, 129, 47, 0.12);
+}
+
+body[data-app-state="running"] .readout::before,
+body[data-app-state="paused"] .readout::before,
+body[data-app-state="completed"] .readout::before {
+  width: min(72vmin, 620px);
+}
+
+body[data-app-state="running"] .readout::after,
+body[data-app-state="paused"] .readout::after,
+body[data-app-state="completed"] .readout::after {
+  width: min(58vmin, 500px);
+}
+
+body[data-app-state="running"] .readout-copy,
+body[data-app-state="paused"] .readout-copy,
+body[data-app-state="completed"] .readout-copy {
+  padding: 36px 32px 42px;
+}
+
+body[data-app-state="running"] .readout strong,
+body[data-app-state="paused"] .readout strong,
+body[data-app-state="completed"] .readout strong {
+  width: 8ch;
+  font-size: clamp(3.7rem, 19vw, 12.5rem);
+  line-height: 0.9;
+}
+
+body[data-app-state="running"] .sprout-buddy,
+body[data-app-state="paused"] .sprout-buddy,
+body[data-app-state="completed"] .sprout-buddy {
+  right: clamp(18px, 4vw, 52px);
+  bottom: clamp(18px, 4vw, 42px);
+  transform: scale(1.28) rotate(3deg);
+  transform-origin: right bottom;
+}
+
+body[data-app-state="running"] .session-meter,
+body[data-app-state="paused"] .session-meter,
+body[data-app-state="completed"] .session-meter {
+  margin-top: 15px;
+}
+
+body[data-app-state="running"] .cheer-message,
+body[data-app-state="paused"] .cheer-message,
+body[data-app-state="completed"] .cheer-message {
+  margin-top: 9px;
+  font-size: clamp(0.94rem, 2.6vw, 1.12rem);
+}
+
+body[data-app-state="running"] .start-duration,
+body[data-app-state="paused"] .start-duration,
+body[data-app-state="completed"] .start-duration {
+  display: none;
+}
+
+body[data-app-state="running"] .primary-actions,
+body[data-app-state="paused"] .primary-actions,
+body[data-app-state="completed"] .primary-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+body[data-app-state="running"] .primary-actions button,
+body[data-app-state="paused"] .primary-actions button,
+body[data-app-state="completed"] .primary-actions button {
+  min-height: 62px;
+  font-size: 1rem;
+}
+
+body[data-app-state="running"] #startBtn,
+body[data-app-state="paused"] #pauseBtn,
+body[data-app-state="completed"] #pauseBtn {
+  display: none;
+}
+
+body[data-app-state="running"] .audio-recovery,
+body[data-app-state="paused"] .audio-recovery,
+body[data-app-state="completed"] .audio-recovery {
+  margin-top: 10px;
+}
+
+@media (max-width: 520px) {
+  body[data-app-state="running"] .counter-panel,
+  body[data-app-state="paused"] .counter-panel,
+  body[data-app-state="completed"] .counter-panel {
+    padding:
+      calc(14px + env(safe-area-inset-top))
+      16px
+      calc(14px + env(safe-area-inset-bottom));
+  }
+
+  body[data-app-state="running"] .readout,
+  body[data-app-state="paused"] .readout,
+  body[data-app-state="completed"] .readout {
+    min-height: min(54dvh, 520px);
+    border-radius: 31px;
+  }
+
+  body[data-app-state="running"] .readout-copy,
+  body[data-app-state="paused"] .readout-copy,
+  body[data-app-state="completed"] .readout-copy {
+    padding: 24px 14px 28px;
+  }
+
+  body[data-app-state="running"] .readout strong,
+  body[data-app-state="paused"] .readout strong,
+  body[data-app-state="completed"] .readout strong {
+    width: 8ch;
+    font-size: clamp(3.4rem, 19vw, 7.3rem);
+  }
+
+  body[data-app-state="running"] .sprout-buddy,
+  body[data-app-state="paused"] .sprout-buddy,
+  body[data-app-state="completed"] .sprout-buddy {
+    transform: scale(1.04) rotate(3deg);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 620px) {
+  body[data-app-state="running"] .counter-panel,
+  body[data-app-state="paused"] .counter-panel,
+  body[data-app-state="completed"] .counter-panel {
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  body[data-app-state="running"] .counter-panel-header,
+  body[data-app-state="paused"] .counter-panel-header,
+  body[data-app-state="completed"] .counter-panel-header {
+    margin-bottom: 7px;
+  }
+
+  body[data-app-state="running"] .readout,
+  body[data-app-state="paused"] .readout,
+  body[data-app-state="completed"] .readout {
+    min-height: 0;
+  }
+
+  body[data-app-state="running"] .session-meter,
+  body[data-app-state="paused"] .session-meter,
+  body[data-app-state="completed"] .session-meter {
+    margin-top: 8px;
+  }
+
+  body[data-app-state="running"] .cheer-message,
+  body[data-app-state="paused"] .cheer-message,
+  body[data-app-state="completed"] .cheer-message {
+    margin-top: 5px;
+  }
+
+  body[data-app-state="running"] .primary-actions,
+  body[data-app-state="paused"] .primary-actions,
+  body[data-app-state="completed"] .primary-actions {
+    margin-top: 8px;
+  }
+
+  body[data-app-state="running"] .primary-actions button,
+  body[data-app-state="paused"] .primary-actions button,
+  body[data-app-state="completed"] .primary-actions button {
+    min-height: 52px;
+  }
+}
+
 /* 状態ごとのほんの少しの楽しさ */
 body[data-app-state="running"] .readout::before { border-color: rgba(96,184,63,0.63); animation: orbit-spin 11s linear infinite; }
 body[data-app-state="running"] .sprout-buddy { animation: buddy-bounce 1.7s ease-in-out infinite; }
@@ -926,7 +1229,7 @@ body[data-app-state="completed"] #countDisplay { color: #5b8f25; }
   .quick-load-button { width: 100%; }
   .counter-panel-header { align-items: flex-start; flex-direction: column; }
   .readout { min-height: 268px; }
-  .readout-copy { padding-inline: 62px; }
+  .readout-copy { padding-inline: 18px; }
   .sprout-buddy { transform: scale(0.86); transform-origin: right bottom; }
   .finish-message-stack { justify-items: start; min-width: 0; }
   .finish-actions { justify-content: flex-start; }
@@ -953,7 +1256,7 @@ body[data-app-state="completed"] #countDisplay { color: #5b8f25; }
   .maker-hero,
   .maker-build-card { border-radius: 22px; }
   .readout { min-height: 246px; }
-  .readout strong { font-size: clamp(5.5rem, 28vw, 8.5rem); }
+  .readout strong { font-size: clamp(3rem, 16vw, 4.8rem); }
 }
 
 @media (max-width: 520px) {

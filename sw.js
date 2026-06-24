@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v22-zundamon-audio-recovery";
+const CACHE_NAME = "count-voice-app-v25-finish-double";
 const ASSETS = [
   "./",
   "./index.html",
