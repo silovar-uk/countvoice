@@ -62,6 +62,7 @@ function Get-ContentType([string]$path) {
     ".json" { return "application/json; charset=utf-8" }
     ".webmanifest" { return "application/manifest+json; charset=utf-8" }
     ".svg" { return "image/svg+xml" }
+    ".ico" { return "image/x-icon" }
     ".png" { return "image/png" }
     ".jpg" { return "image/jpeg" }
     ".jpeg" { return "image/jpeg" }

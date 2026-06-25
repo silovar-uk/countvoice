@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v29-ambient-noise";
+const CACHE_NAME = "count-voice-app-v30-safari-favorites";
 const ASSETS = [
   "./",
   "./index.html",
@@ -11,6 +11,14 @@ const ASSETS = [
   "./voice-pack-maker.js",
   "./manifest.webmanifest",
   "./favicon.ico",
+  "./apple-touch-icon.png",
+  "./apple-touch-icon-precomposed.png",
+  "./apple-touch-icon-180x180.png",
+  "./apple-touch-icon-167x167.png",
+  "./apple-touch-icon-152x152.png",
+  "./apple-touch-icon-120x120.png",
+  "./favicon-32x32.png",
+  "./favicon-16x16.png",
   "./icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
