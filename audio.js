@@ -16,6 +16,15 @@ export class AudioStore {
     this.hardResetRequired = false;
     this.suppressMediaEvents = false;
 
+    // Ambient-noise settings are kept separately from the spoken-voice volume.
+    // The app owns when the noise should be playing; this store owns the audio nodes.
+    this.ambientMode = "none";
+    this.ambientLevel = 0.18;
+    this.ambientSource = null;
+    this.ambientGain = null;
+    this.ambientContext = null;
+    this.ambientActiveMode = "none";
+
     this.bindMediaElementEvents();
   }
 
@@ -91,6 +100,10 @@ export class AudioStore {
     this.mediaDestination = null;
     this.usingMediaBridge = false;
     this.mediaBridgePaused = true;
+    this.ambientSource = null;
+    this.ambientGain = null;
+    this.ambientContext = null;
+    this.ambientActiveMode = "none";
     context.addEventListener("statechange", () => {
       if (this.context === context) this.emitContextState();
     });
@@ -129,6 +142,7 @@ export class AudioStore {
 
   recreateContextForUserGesture() {
     const previous = this.context;
+    this.stopAmbientNoise({ fadeOut: 0 });
     this.releaseMediaBridge();
     this.context = null;
     this.masterGain = null;
@@ -176,6 +190,155 @@ export class AudioStore {
     }
 
     return this.volume;
+  }
+
+  setAmbientNoise({ mode = this.ambientMode, level = this.ambientLevel } = {}) {
+    const nextMode = ["none", "white", "brown"].includes(mode) ? mode : "none";
+    const parsed = Number(level);
+    const nextLevel = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : this.ambientLevel;
+    const modeChanged = nextMode !== this.ambientMode;
+
+    this.ambientMode = nextMode;
+    this.ambientLevel = nextLevel;
+
+    if (this.ambientGain && this.context && this.context.state !== "closed") {
+      const now = this.context.currentTime;
+      try {
+        this.ambientGain.gain.cancelScheduledValues(now);
+        this.ambientGain.gain.setTargetAtTime(nextLevel, now, 0.028);
+      } catch {
+        this.ambientGain.gain.value = nextLevel;
+      }
+    }
+
+    if (nextMode === "none" || (modeChanged && this.ambientSource)) {
+      this.stopAmbientNoise();
+    }
+
+    return { mode: this.ambientMode, level: this.ambientLevel };
+  }
+
+  createAmbientBuffer(mode, context) {
+    const seconds = mode === "brown" ? 18 : 12;
+    const length = Math.max(1, Math.floor(context.sampleRate * seconds));
+    const buffer = context.createBuffer(1, length, context.sampleRate);
+    const output = buffer.getChannelData(0);
+
+    if (mode === "brown") {
+      let brown = 0;
+      for (let index = 0; index < length; index += 1) {
+        const white = Math.random() * 2 - 1;
+        brown = (brown + white * 0.035) * 0.9975;
+        output[index] = brown;
+      }
+
+      // Remove the start/end drift so a loop point does not create a large click.
+      const start = output[0];
+      const end = output[length - 1];
+      const denominator = Math.max(1, length - 1);
+      let peak = 0;
+      for (let index = 0; index < length; index += 1) {
+        const value = output[index] - (start + (end - start) * (index / denominator));
+        output[index] = value;
+        peak = Math.max(peak, Math.abs(value));
+      }
+      const scale = peak > 0 ? 0.94 / peak : 1;
+      for (let index = 0; index < length; index += 1) output[index] *= scale;
+      return buffer;
+    }
+
+    for (let index = 0; index < length; index += 1) {
+      output[index] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  }
+
+  async startAmbientNoise({ mode = this.ambientMode, level = this.ambientLevel, restart = false } = {}) {
+    this.setAmbientNoise({ mode, level });
+    if (this.ambientMode === "none") return false;
+
+    const context = await this.ensureContext({ resume: true });
+    if (context.state !== "running" || !this.masterGain) return false;
+
+    const canReuse = this.ambientSource
+      && this.ambientContext === context
+      && this.ambientActiveMode === this.ambientMode;
+
+    if (canReuse && !restart) {
+      this.setAmbientNoise({ mode: this.ambientMode, level: this.ambientLevel });
+      return true;
+    }
+
+    this.stopAmbientNoise({ fadeOut: restart ? 0.025 : 0 });
+
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = this.createAmbientBuffer(this.ambientMode, context);
+    source.loop = true;
+    gain.gain.setValueAtTime(0, context.currentTime);
+    source.connect(gain).connect(this.masterGain);
+
+    const startAt = context.currentTime + 0.012;
+    const fadeTarget = this.ambientLevel;
+    try {
+      gain.gain.linearRampToValueAtTime(fadeTarget, startAt + 0.09);
+    } catch {
+      gain.gain.value = fadeTarget;
+    }
+
+    this.ambientSource = source;
+    this.ambientGain = gain;
+    this.ambientContext = context;
+    this.ambientActiveMode = this.ambientMode;
+
+    source.addEventListener("ended", () => {
+      if (this.ambientSource === source) {
+        this.ambientSource = null;
+        this.ambientGain = null;
+        this.ambientContext = null;
+        this.ambientActiveMode = "none";
+      }
+      try { source.disconnect(); } catch { /* optional cleanup */ }
+      try { gain.disconnect(); } catch { /* optional cleanup */ }
+    }, { once: true });
+
+    try {
+      source.start(startAt);
+      return true;
+    } catch {
+      if (this.ambientSource === source) {
+        this.ambientSource = null;
+        this.ambientGain = null;
+        this.ambientContext = null;
+        this.ambientActiveMode = "none";
+      }
+      return false;
+    }
+  }
+
+  stopAmbientNoise({ fadeOut = 0.07 } = {}) {
+    const source = this.ambientSource;
+    const gain = this.ambientGain;
+    const context = this.ambientContext ?? this.context;
+
+    this.ambientSource = null;
+    this.ambientGain = null;
+    this.ambientContext = null;
+    this.ambientActiveMode = "none";
+
+    if (!source) return;
+    const fade = Math.max(0, Number(fadeOut) || 0);
+    const now = context?.currentTime ?? 0;
+
+    try {
+      if (gain && context && context.state !== "closed") {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(gain.gain.value, now);
+        if (fade > 0) gain.gain.linearRampToValueAtTime(0.0001, now + fade);
+      }
+    } catch { /* optional fade */ }
+
+    try { source.stop(now + fade + 0.035); } catch { /* already ended */ }
   }
 
   async ensureContext({ resume = true, preferMediaElement = false } = {}) {
@@ -361,7 +524,7 @@ export function arrayBufferToBase64(buffer) {
 export function base64ToArrayBuffer(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
+  for (let i = 0; i < bytes.length; i += 1) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;

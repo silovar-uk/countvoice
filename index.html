@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=28" />
+    <link rel="stylesheet" href="./styles.css?v=29" />
   </head>
   <body data-app-state="stopped">
     <main class="app-shell">
@@ -87,6 +87,31 @@
           <div class="volume-slider-wrap">
             <input id="volumeSlider" type="range" min="0" max="100" step="1" value="50" aria-label="アプリの音量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="50%" />
             <output id="volumeValue" for="volumeSlider" aria-live="off">50%</output>
+          </div>
+        </section>
+
+        <section id="ambientControl" class="ambient-control" data-noise-enabled="false" aria-label="カウント中にながす音">
+          <div class="ambient-copy">
+            <span class="ambient-icon" aria-hidden="true">◌</span>
+            <div>
+              <span class="ambient-label">ながし音</span>
+              <span class="ambient-note">カウント中だけ、うしろで流れます</span>
+            </div>
+          </div>
+          <div class="ambient-fields">
+            <label class="sr-only" for="noiseMode">ながし音の種類</label>
+            <select id="noiseMode" aria-label="ながし音の種類">
+              <option value="none">なし</option>
+              <option value="white">ホワイトノイズ</option>
+              <option value="brown">ブラウンノイズ</option>
+            </select>
+            <div class="noise-level-wrap">
+              <label for="noiseVolumeSlider">ながし音の大きさ</label>
+              <div class="noise-level-slider">
+                <input id="noiseVolumeSlider" type="range" min="0" max="100" step="1" value="18" aria-label="ながし音の大きさ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-valuetext="18%" disabled />
+                <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="off">18%</output>
+              </div>
+            </div>
           </div>
         </section>
 

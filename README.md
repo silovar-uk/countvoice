@@ -1,4 +1,4 @@
-# CountVoice v27 - default volume 50%
+# CountVoice v29 - ambient noise
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -138,3 +138,11 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - 一時停止後、アプリを閉じた後、ほかの音声に割り込まれた後でも、ユーザー操作をきっかけに音声パックを再デコードし、現在位置から読み上げを予約し直します。
 - バックグラウンド優先モードでは、MediaStreamの出力先も再生成してから再生します。
 - 終了済み画面で「音を復帰」を押した場合も、終了メッセージを2回読み上げます。
+
+
+## v29: ながし音（ホワイトノイズ／ブラウンノイズ）
+
+- 「ながし音」で **なし／ホワイトノイズ／ブラウンノイズ** を選べます。初期値は「なし」です。
+- 選択したながし音は、**カウント中だけ**読み上げの後ろで流れます。一時停止・リセット・終了時には止まります。
+- ながし音の音量は読み上げ音量とは別に0〜100%で調整でき、端末ごとに保存されます。初期値は18%です。
+- iPhoneで音声出力を作り直す場合も、再開後に選択中のながし音を再生成します。

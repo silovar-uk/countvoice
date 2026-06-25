@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v28-mobile-audio-reset";
+const CACHE_NAME = "count-voice-app-v29-ambient-noise";
 const ASSETS = [
   "./",
   "./index.html",

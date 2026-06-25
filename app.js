@@ -9,6 +9,8 @@ const FINISH_GAP_SECONDS = 0.18;
 const FINISH_REPEAT_GAP_SECONDS = 0.42;
 const FINISH_PLAY_COUNT = 2;
 const DEFAULT_APP_VOLUME_PERCENT = 50;
+const DEFAULT_AMBIENT_NOISE_MODE = "none";
+const DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT = 18;
 
 const $ = (id) => document.getElementById(id);
 
@@ -28,6 +30,10 @@ const els = {
   resumeAudioBtn: $("resumeAudioBtn"),
   volumeSlider: $("volumeSlider"),
   volumeValue: $("volumeValue"),
+  ambientControl: $("ambientControl"),
+  noiseMode: $("noiseMode"),
+  noiseVolumeSlider: $("noiseVolumeSlider"),
+  noiseVolumeValue: $("noiseVolumeValue"),
   mode: $("mode"),
   targetSeconds: $("targetSeconds"),
   targetSecondsLabel: $("targetSecondsLabel"),
@@ -81,6 +87,9 @@ const state = {
   audioReschedulePromise: null,
   volume: DEFAULT_APP_VOLUME_PERCENT / 100,
   volumeSaveTimer: null,
+  ambientNoiseMode: DEFAULT_AMBIENT_NOISE_MODE,
+  ambientNoiseVolume: DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT / 100,
+  ambientNoiseSaveTimer: null,
 };
 
 init();
@@ -90,6 +99,7 @@ async function init() {
   bindAudioRecoverySignals();
   configureMediaSession();
   await restoreVolume();
+  await restoreAmbientNoise();
   await restorePack();
   render();
   updateFinishMessageUI();
@@ -107,6 +117,9 @@ function bindEvents() {
   els.resumeAudioBtn.addEventListener("click", recoverAudioFromUserAction);
   els.volumeSlider.addEventListener("input", () => setAppVolume(els.volumeSlider.value));
   els.volumeSlider.addEventListener("change", () => flushVolumeSave());
+  els.noiseMode.addEventListener("change", () => setAmbientNoiseMode(els.noiseMode.value));
+  els.noiseVolumeSlider.addEventListener("input", () => setAmbientNoiseVolume(els.noiseVolumeSlider.value));
+  els.noiseVolumeSlider.addEventListener("change", () => flushAmbientNoiseSave());
   els.mode.addEventListener("change", () => {
     reset();
     updateTargetCopy();
@@ -163,6 +176,92 @@ function flushVolumeSave() {
   setValue("appVolume", Math.round(state.volume * 100)).catch(() => {});
 }
 
+async function restoreAmbientNoise() {
+  const [storedMode, storedVolume] = await Promise.all([
+    getValue("ambientNoiseMode").catch(() => null),
+    getValue("ambientNoiseVolume").catch(() => null),
+  ]);
+
+  const volume = Number(storedVolume);
+  setAmbientNoiseVolume(Number.isFinite(volume) ? volume : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
+  setAmbientNoiseMode(typeof storedMode === "string" ? storedMode : DEFAULT_AMBIENT_NOISE_MODE, { save: false });
+}
+
+function setAmbientNoiseMode(mode, { save = true } = {}) {
+  const normalized = ["none", "white", "brown"].includes(mode) ? mode : "none";
+  state.ambientNoiseMode = normalized;
+  els.noiseMode.value = normalized;
+  els.ambientControl.dataset.noiseEnabled = String(normalized !== "none");
+  els.noiseVolumeSlider.disabled = normalized === "none";
+  audioStore.setAmbientNoise({ mode: normalized, level: state.ambientNoiseVolume });
+
+  if (normalized === "none") {
+    audioStore.stopAmbientNoise();
+  } else if (state.running) {
+    syncAmbientNoise({ restart: true }).catch(() => {
+      setAudioRecoveryNeeded(true, "ながし音を開始できませんでした。ほかの音を止めてから「音を復帰」を押してください。");
+    });
+  }
+
+  if (save) queueAmbientNoiseSave();
+  updateBackgroundStatus();
+}
+
+function setAmbientNoiseVolume(percent, { save = true } = {}) {
+  const normalizedPercent = clamp(Math.round(Number(percent) || 0), 0, 100);
+  state.ambientNoiseVolume = normalizedPercent / 100;
+  els.noiseVolumeSlider.value = String(normalizedPercent);
+  els.noiseVolumeSlider.setAttribute("aria-valuenow", String(normalizedPercent));
+  els.noiseVolumeSlider.setAttribute("aria-valuetext", `${normalizedPercent}%`);
+  els.noiseVolumeValue.textContent = `${normalizedPercent}%`;
+  audioStore.setAmbientNoise({ mode: state.ambientNoiseMode, level: state.ambientNoiseVolume });
+
+  if (save) queueAmbientNoiseSave();
+}
+
+function queueAmbientNoiseSave() {
+  clearTimeout(state.ambientNoiseSaveTimer);
+  state.ambientNoiseSaveTimer = window.setTimeout(() => {
+    state.ambientNoiseSaveTimer = null;
+    flushAmbientNoiseSave();
+  }, 180);
+}
+
+function flushAmbientNoiseSave() {
+  if (state.ambientNoiseSaveTimer) {
+    clearTimeout(state.ambientNoiseSaveTimer);
+    state.ambientNoiseSaveTimer = null;
+  }
+  Promise.all([
+    setValue("ambientNoiseMode", state.ambientNoiseMode),
+    setValue("ambientNoiseVolume", Math.round(state.ambientNoiseVolume * 100)),
+  ]).catch(() => {});
+}
+
+function ambientNoiseLabel() {
+  if (state.ambientNoiseMode === "white") return "ホワイトノイズ";
+  if (state.ambientNoiseMode === "brown") return "ブラウンノイズ";
+  return "なし";
+}
+
+async function syncAmbientNoise({ restart = false } = {}) {
+  if (!state.running || state.ambientNoiseMode === "none") {
+    audioStore.stopAmbientNoise();
+    return false;
+  }
+
+  const started = await audioStore.startAmbientNoise({
+    mode: state.ambientNoiseMode,
+    level: state.ambientNoiseVolume,
+    restart,
+  });
+
+  if (!started) {
+    setAudioRecoveryNeeded(true, "ながし音を再生できませんでした。ほかの音を止めてから「音を復帰」を押してください。");
+  }
+  return started;
+}
+
 async function restorePack() {
   const initialPackUrl = new URLSearchParams(location.search).get("pack");
   if (initialPackUrl) {
@@ -192,7 +291,7 @@ async function start() {
   // iPhoneでは、一度止めた・閉じたあとの古い出力先が見かけ上だけ残ることがあります。
   // 開始／再開のタップごとに、音声出力を新しいユーザー操作として組み直します。
   configurePlaybackAudioSession();
-  if (usesBufferedPack()) {
+  if (usesAudioGraph()) {
     const ready = await prepareAudioForUserAction({ forceRecreate: true });
     if (!ready) return;
   } else {
@@ -205,6 +304,7 @@ async function start() {
   state.scheduledUntilSecond = Math.floor(state.pausedElapsed);
   setMediaSessionState("playing");
   await requestWakeLock();
+  await syncAmbientNoise({ restart: true });
   await scheduleAudioAhead();
   render();
   tick();
@@ -216,6 +316,7 @@ function pause() {
   state.running = false;
   clearTimeout(state.timerId);
   stopScheduledAudio();
+  audioStore.stopAmbientNoise({ fadeOut: 0 });
   audioStore.pauseMediaBridge();
   audioStore.markForUserGestureReset();
   setAudioRecoveryNeeded(false);
@@ -233,6 +334,7 @@ function reset() {
   state.nextFallbackSecond = 1;
   state.scheduledUntilSecond = 0;
   stopScheduledAudio();
+  audioStore.stopAmbientNoise({ fadeOut: 0 });
   audioStore.pauseMediaBridge();
   audioStore.markForUserGestureReset();
   setAudioRecoveryNeeded(false);
@@ -271,6 +373,7 @@ function completeCount() {
   state.completed = true;
   state.pausedElapsed = targetSeconds();
   clearTimeout(state.timerId);
+  audioStore.stopAmbientNoise({ fadeOut: 0.12 });
   releaseWakeLock();
   render();
 
@@ -545,7 +648,7 @@ async function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
     // バックグラウンド復帰後は、次のユーザー操作で出力先を作り直す。
     // 予約済みの音声はそのまま活かし、復帰時に実際に止まっていた場合だけ案内する。
-    if (usesBufferedPack()) audioStore.markForUserGestureReset({ hard: true });
+    if (usesAudioGraph()) audioStore.markForUserGestureReset({ hard: true });
     return;
   }
   await handleReturnToApp();
@@ -553,13 +656,14 @@ async function handleVisibilityChange() {
 
 function handlePageHide() {
   flushVolumeSave();
-  if (usesBufferedPack()) audioStore.markForUserGestureReset({ hard: true });
+  flushAmbientNoiseSave();
+  if (usesAudioGraph()) audioStore.markForUserGestureReset({ hard: true });
   if (!state.running) stopScheduledAudio();
 }
 
 async function handleReturnToApp() {
   if (!state.running) {
-    if (state.completed && usesBufferedPack() && (audioStore.state !== "running" || audioStore.mediaBridgePaused)) {
+    if (state.completed && usesAudioGraph() && (audioStore.state !== "running" || audioStore.mediaBridgePaused)) {
       setAudioRecoveryNeeded(true, "終了音声が止まっているかもしれません。「音を復帰」を押すと、終了メッセージを2回読み上げます。");
     }
     return;
@@ -567,7 +671,7 @@ async function handleReturnToApp() {
 
   await requestWakeLock();
 
-  if (!usesBufferedPack()) {
+  if (!usesAudioGraph()) {
     resumeBrowserSpeech();
     tick();
     return;
@@ -588,7 +692,7 @@ async function rescheduleRunningAudio() {
   updateBackgroundStatus();
   if (!state.running) return;
 
-  if (usesBufferedPack() && (audioStore.state !== "running" || (els.backgroundMode.checked && audioStore.usingMediaBridge && audioStore.mediaBridgePaused))) {
+  if (usesAudioGraph() && (audioStore.state !== "running" || (els.backgroundMode.checked && audioStore.usingMediaBridge && audioStore.mediaBridgePaused))) {
     setAudioRecoveryNeeded(true, "音声の出力が止まっています。「音を復帰」を押すと、今の秒数から読み上げ直します。");
     return;
   }
@@ -599,7 +703,7 @@ async function rescheduleRunningAudio() {
 
 function bindAudioRecoverySignals() {
   audioStore.onContextStateChange(({ state: contextState }) => {
-    if (!state.running) return;
+    if (!state.running || !usesAudioGraph()) return;
 
     if (contextState !== "running") {
       setAudioRecoveryNeeded(true, "ほかの再生によって音声が一時停止しました。ほかの音を止めてから「音を復帰」を押してください。");
@@ -614,7 +718,7 @@ function bindAudioRecoverySignals() {
   });
 
   audioStore.onMediaBridgeEvent(({ type }) => {
-    if (!state.running || !els.backgroundMode.checked || !audioStore.usingMediaBridge) return;
+    if (!state.running || !usesAudioGraph() || !els.backgroundMode.checked || !audioStore.usingMediaBridge) return;
 
     if (type === "pause" || type === "ended") {
       setAudioRecoveryNeeded(true, "ほかの再生で音声出力が止まりました。ほかの音を止めてから「音を復帰」を押してください。");
@@ -650,7 +754,7 @@ async function recoverAudioFromUserAction() {
   els.resumeAudioBtn.textContent = "復帰中…";
 
   try {
-    if (usesBufferedPack()) {
+    if (usesAudioGraph()) {
       // ユーザーが押した復帰ボタンでは、必ず古い出力先を捨てて再構築する。
       stopScheduledAudio();
       const ready = await prepareAudioForUserAction({ forceRecreate: true });
@@ -687,6 +791,8 @@ async function rescheduleAudioFromCurrentPosition({ clearRecovery = false } = {}
     stopScheduledAudio();
     state.scheduledUntilSecond = Math.floor(elapsedSeconds());
     state.nextFallbackSecond = state.scheduledUntilSecond + 1;
+
+    await syncAmbientNoise({ restart: true });
 
     if (usesBufferedPack()) {
       await scheduleAudioAhead();
@@ -725,6 +831,10 @@ function resetBrowserSpeechForUserAction() {
   if (!("speechSynthesis" in window)) return;
   try { speechSynthesis.cancel(); } catch { /* optional */ }
   resumeBrowserSpeech();
+}
+
+function usesAudioGraph() {
+  return usesBufferedPack() || state.ambientNoiseMode !== "none";
 }
 
 function usesBufferedPack() {
@@ -1187,12 +1297,16 @@ function updateBackgroundStatus(message = "") {
 
   const sessionReady = "audioSession" in navigator;
   const bridgeReady = audioStore.usingMediaBridge;
+  const ambientNote = state.ambientNoiseMode === "none"
+    ? "ながし音はなしです。"
+    : `ながし音は${ambientNoiseLabel()}（${Math.round(state.ambientNoiseVolume * 100)}%）です。`;
+
   if (state.running) {
-    els.backgroundStatus.textContent = `${sessionReady ? "再生セッションを設定し、" : "再生セッション非対応のため、"}${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声と終了メッセージを予約中です${bridgeReady ? "。" : "（端末側のメディア再生を利用できない場合があります）。"}`;
+    els.backgroundStatus.textContent = `${sessionReady ? "再生セッションを設定し、" : "再生セッション非対応のため、"}${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声と終了メッセージを予約中です${bridgeReady ? "。" : "（端末側のメディア再生を利用できない場合があります）。"} ${ambientNote}`;
     return;
   }
 
-  els.backgroundStatus.textContent = `開始時に${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約します。ほかの再生で止まった場合は、操作の近くの「音を復帰」で読み上げを戻せます。`;
+  els.backgroundStatus.textContent = `開始時に${BACKGROUND_LOOKAHEAD_SECONDS / 60}分先まで音声を予約します。ほかの再生で止まった場合は、操作の近くの「音を復帰」で読み上げを戻せます。 ${ambientNote}`;
 }
 
 function hasFinishAudio() {
