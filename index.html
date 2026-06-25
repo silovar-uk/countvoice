@@ -160,8 +160,10 @@
                 <div class="noise-level-wrap">
                   <label for="noiseVolumeSlider">ながし音の大きさ</label>
                   <div class="noise-level-slider">
+                    <button id="noiseVolumeDownBtn" class="noise-step-button" type="button" aria-label="ながし音を5%下げる">−</button>
                     <input id="noiseVolumeSlider" type="range" min="0" max="100" step="1" value="18" aria-label="ながし音の大きさ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-valuetext="18%" />
-                    <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="off">18%</output>
+                    <button id="noiseVolumeUpBtn" class="noise-step-button" type="button" aria-label="ながし音を5%上げる">＋</button>
+                    <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="polite">18%</output>
                   </div>
                 </div>
               </div>

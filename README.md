@@ -1,4 +1,4 @@
-# CountVoice v29 - ambient noise
+# CountVoice v33 - iPhone ambient-noise volume fix
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -160,3 +160,10 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - 同じバーから現在のURLを再読み込みでき、必要なときだけ「URLを変更」で入力欄を展開できます。
 - 開始前は「秒数 → 開始」を先に置き、音量・ながし音は折りたたみ式にしました。
 - 集中画面はPC・スマホとも、通常状態では画面内で完結するグリッドへ調整しています。
+
+
+## v33: iPhone ながし音音量の修正
+
+- 未設定のながし音音量が誤って `0%` と扱われる不具合を修正しました。
+- 初回・旧版からの更新時は、明示的に0%を選んだ記録がない限り18%へ復元します。
+- ホワイト／ブラウンノイズ選択後、つまみが動かない場合でも `− / ＋` ボタンで5%ずつ変更できます。

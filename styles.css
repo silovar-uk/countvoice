@@ -755,10 +755,39 @@ h2 {
 
 .noise-level-slider {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) 28px auto;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   min-width: 0;
+}
+
+.noise-level-slider input[type="range"] {
+  min-width: 0;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.noise-step-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid #9dce82;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #34762e;
+  box-shadow: 0 2px 5px rgba(63, 127, 45, 0.12);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.noise-step-button:active {
+  transform: translateY(1px) scale(0.97);
 }
 
 .noise-level-slider output {
@@ -771,8 +800,9 @@ h2 {
   text-align: right;
 }
 
-.ambient-control[data-noise-enabled="false"] .noise-level-wrap { opacity: 0.43; }
-.ambient-control[data-noise-enabled="false"] .noise-level-slider input { cursor: not-allowed; }
+/* 音量は「なし」の状態でも先に調整できる。無効状態に見せない。 */
+.ambient-control[data-noise-enabled="false"] .noise-level-wrap { opacity: 1; }
+.ambient-control[data-noise-enabled="false"] .noise-level-slider input { cursor: pointer; }
 
 .start-duration {
   margin-top: 14px;
@@ -1542,15 +1572,7 @@ body[data-app-state="completed"] #countDisplay { color: #5b8f25; }
 }
 
 
-/* v31: iPhoneで「なし」から選んだ後も、ながし音の大きさを常に調整できるようにする。 */
-.ambient-control[data-noise-enabled="false"] .noise-level-wrap {
-  opacity: 1;
-}
-
-.ambient-control[data-noise-enabled="false"] .noise-level-slider input {
-  cursor: pointer;
-}
-
+/* v33: ノイズ未選択でもつまみ／±ボタンを常に操作可能にする。 */
 .ambient-control[data-noise-enabled="false"] .noise-level-wrap > label::after {
   content: "（先に設定）";
   margin-left: 3px;
@@ -2157,4 +2179,36 @@ body[data-app-state="completed"] .readout-copy {
   body[data-app-state="running"] .primary-actions button,
   body[data-app-state="paused"] .primary-actions button,
   body[data-app-state="completed"] .primary-actions button { min-height: 46px; }
+}
+
+/* v33: iPhoneのrange操作が不安定な場合も、±で必ず音量を変更できる。 */
+@media (max-width: 699px) {
+  .noise-level-slider {
+    grid-template-columns: 30px minmax(0, 1fr) 30px auto;
+    gap: 6px;
+  }
+  .noise-step-button {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 10px;
+    font-size: 1.06rem;
+  }
+
+  body[data-app-state="running"] .noise-level-slider,
+  body[data-app-state="paused"] .noise-level-slider,
+  body[data-app-state="completed"] .noise-level-slider {
+    grid-template-columns: 26px minmax(0, 1fr) 26px auto;
+    gap: 4px;
+  }
+
+  body[data-app-state="running"] .noise-step-button,
+  body[data-app-state="paused"] .noise-step-button,
+  body[data-app-state="completed"] .noise-step-button {
+    width: 26px;
+    height: 26px;
+    min-height: 26px;
+    border-radius: 8px;
+    font-size: .92rem;
+  }
 }

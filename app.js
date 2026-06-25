@@ -33,6 +33,8 @@ const els = {
   ambientControl: $("ambientControl"),
   noiseMode: $("noiseMode"),
   noiseVolumeSlider: $("noiseVolumeSlider"),
+  noiseVolumeDownBtn: $("noiseVolumeDownBtn"),
+  noiseVolumeUpBtn: $("noiseVolumeUpBtn"),
   noiseVolumeValue: $("noiseVolumeValue"),
   mode: $("mode"),
   targetSeconds: $("targetSeconds"),
@@ -98,6 +100,7 @@ const state = {
   ambientNoiseVolume: DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT / 100,
   ambientNoiseSaveTimer: null,
   ambientSettingsTouched: false,
+  ambientNoiseVolumeTouched: false,
 };
 
 init();
@@ -135,6 +138,12 @@ function bindEvents() {
     handleAmbientNoiseVolumeControl();
     flushAmbientNoiseSave();
   });
+  // iOS Safari occasionally misses the first range `input` after a select change.
+  // Read the final thumb value on touch/pointer release as a fallback.
+  els.noiseVolumeSlider.addEventListener("touchend", handleAmbientNoiseVolumeControl, { passive: true });
+  els.noiseVolumeSlider.addEventListener("pointerup", handleAmbientNoiseVolumeControl);
+  els.noiseVolumeDownBtn?.addEventListener("click", () => nudgeAmbientNoiseVolume(-5));
+  els.noiseVolumeUpBtn?.addEventListener("click", () => nudgeAmbientNoiseVolume(5));
   els.mode.addEventListener("change", () => {
     reset();
     updateTargetCopy();
@@ -198,23 +207,48 @@ function flushVolumeSave() {
 }
 
 async function restoreAmbientNoise() {
-  const [storedMode, storedVolume] = await Promise.all([
+  const [storedMode, storedVolume, storedVolumeTouched] = await Promise.all([
     getValue("ambientNoiseMode").catch(() => null),
     getValue("ambientNoiseVolume").catch(() => null),
+    getValue("ambientNoiseVolumeTouched").catch(() => null),
   ]);
 
   // iPhoneではIndexedDBの復元が遅れ、画面を先に操作した内容を
   // 復元値が上書きすることがあります。ユーザー操作後は保存値で戻しません。
   if (state.ambientSettingsTouched) return;
 
-  const volume = Number(storedVolume);
-  setAmbientNoiseVolume(Number.isFinite(volume) ? volume : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
-  setAmbientNoiseMode(typeof storedMode === "string" ? storedMode : DEFAULT_AMBIENT_NOISE_MODE, { save: false });
+  const mode = ["none", "white", "brown"].includes(storedMode)
+    ? storedMode
+    : DEFAULT_AMBIENT_NOISE_MODE;
+  const rawVolume = storedVolume === null || storedVolume === undefined || storedVolume === ""
+    ? NaN
+    : Number(storedVolume);
+  const storedVolumeIsValid = Number.isFinite(rawVolume) && rawVolume >= 0 && rawVolume <= 100;
+  const didUserSetVolume = storedVolumeTouched === true;
+
+  // 旧版では Number(null) が 0 になり、未設定なのに「0%」として
+  // 保存されることがありました。明示的に0%を選んだ記録がない限り、
+  // その値は初期値（18%）へ移行します。
+  const isLegacyZero = !didUserSetVolume && rawVolume === 0;
+  const nextVolume = storedVolumeIsValid && !isLegacyZero
+    ? rawVolume
+    : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT;
+
+  state.ambientNoiseVolumeTouched = didUserSetVolume;
+  setAmbientNoiseVolume(nextVolume, { save: false });
+  setAmbientNoiseMode(mode, { save: false });
 }
 
 function handleAmbientNoiseModeControl() {
   state.ambientSettingsTouched = true;
   const nextMode = els.noiseMode.value;
+
+  // 古いiPhone保存値の0%に当たった場合も、最初にノイズを選んだ時点で
+  // 聞こえる初期値へ戻します。明示的に0%へ動かした人の設定は維持します。
+  if (nextMode !== "none" && state.ambientNoiseVolume <= 0 && !state.ambientNoiseVolumeTouched) {
+    setAmbientNoiseVolume(DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
+  }
+
   if (nextMode === state.ambientNoiseMode) return;
   setAmbientNoiseMode(nextMode);
 }
@@ -233,7 +267,16 @@ function updateAmbientNoiseControls(mode) {
 
 function handleAmbientNoiseVolumeControl() {
   state.ambientSettingsTouched = true;
+  state.ambientNoiseVolumeTouched = true;
   setAmbientNoiseVolume(els.noiseVolumeSlider.value);
+}
+
+function nudgeAmbientNoiseVolume(delta) {
+  state.ambientSettingsTouched = true;
+  state.ambientNoiseVolumeTouched = true;
+  const next = Math.round(state.ambientNoiseVolume * 100) + delta;
+  setAmbientNoiseVolume(next);
+  flushAmbientNoiseSave();
 }
 
 function setAmbientNoiseMode(mode, { save = true } = {}) {
@@ -257,7 +300,12 @@ function setAmbientNoiseMode(mode, { save = true } = {}) {
 }
 
 function setAmbientNoiseVolume(percent, { save = true } = {}) {
-  const normalizedPercent = clamp(Math.round(Number(percent) || 0), 0, 100);
+  const parsedPercent = Number(percent);
+  const normalizedPercent = clamp(
+    Math.round(Number.isFinite(parsedPercent) ? parsedPercent : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT),
+    0,
+    100,
+  );
   state.ambientNoiseVolume = normalizedPercent / 100;
   els.noiseVolumeSlider.value = String(normalizedPercent);
   els.noiseVolumeSlider.setAttribute("aria-valuenow", String(normalizedPercent));
@@ -284,6 +332,7 @@ function flushAmbientNoiseSave() {
   Promise.all([
     setValue("ambientNoiseMode", state.ambientNoiseMode),
     setValue("ambientNoiseVolume", Math.round(state.ambientNoiseVolume * 100)),
+    setValue("ambientNoiseVolumeTouched", state.ambientNoiseVolumeTouched),
   ]).catch(() => {});
 }
 
