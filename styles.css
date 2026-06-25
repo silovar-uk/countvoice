@@ -2326,3 +2326,278 @@ body[data-app-state="completed"] .noise-level-slider { grid-template-columns: 34
 body[data-app-state="running"] .noise-step-button,
 body[data-app-state="paused"] .noise-step-button,
 body[data-app-state="completed"] .noise-step-button { width: 34px; height: 34px; min-height: 34px; }
+
+
+/* v35: 音量・ながし音を、折りたたみを開いても崩れないコンパクトな設定面にする。 */
+.sound-settings-content {
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.sound-settings-content .volume-control {
+  grid-template-columns: minmax(0, 1fr) minmax(160px, .86fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 15px;
+}
+
+.sound-settings-content .ambient-control {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 15px;
+}
+
+.ambient-heading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(146px, .72fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.ambient-mode-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #5e8554;
+  font-size: .72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ambient-mode-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 28px 0 10px;
+  border-color: #b2dca1;
+  border-radius: 12px;
+  color: #2f792a;
+  background-color: #ffffff;
+  font-size: .82rem;
+  font-weight: 950;
+}
+
+.ambient-control .noise-level-wrap {
+  display: block;
+  margin-top: 9px;
+}
+
+.ambient-control .noise-level-heading {
+  margin-bottom: 6px;
+}
+
+.ambient-control .noise-level-heading > span {
+  color: #598250;
+  font-size: .76rem;
+  font-weight: 950;
+}
+
+.noise-preset-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.noise-preset-button {
+  min-height: 42px;
+  padding: 4px 5px;
+  border-radius: 12px;
+  font-size: .72rem;
+  line-height: 1.05;
+}
+
+.noise-preset-button strong {
+  margin-top: 2px;
+  font-size: .78rem;
+}
+
+/* 集中画面で設定を開いた時は、進行表示を畳んで設定面に必要な高さを渡す。 */
+body[data-app-state="running"][data-sound-settings-open="true"] .counter-panel,
+body[data-app-state="paused"][data-sound-settings-open="true"] .counter-panel,
+body[data-app-state="completed"][data-sound-settings-open="true"] .counter-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "header"
+    "readout"
+    "actions"
+    "sound";
+  overflow: hidden;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .session-meter,
+body[data-app-state="paused"][data-sound-settings-open="true"] .session-meter,
+body[data-app-state="completed"][data-sound-settings-open="true"] .session-meter,
+body[data-app-state="running"][data-sound-settings-open="true"] .cheer-message,
+body[data-app-state="paused"][data-sound-settings-open="true"] .cheer-message,
+body[data-app-state="completed"][data-sound-settings-open="true"] .cheer-message {
+  display: none;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings,
+body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings,
+body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings {
+  align-self: end;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings-content,
+body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings-content,
+body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings-content {
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+  gap: 8px;
+  padding: 0 9px 9px;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings-content .volume-control,
+body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings-content .volume-control,
+body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings-content .volume-control,
+body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings-content .ambient-control,
+body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings-content .ambient-control,
+body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings-content .ambient-control {
+  padding: 8px 10px;
+  border-radius: 14px;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings-content .volume-control,
+body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings-content .volume-control,
+body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings-content .volume-control {
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .ambient-heading-row,
+body[data-app-state="paused"][data-sound-settings-open="true"] .ambient-heading-row,
+body[data-app-state="completed"][data-sound-settings-open="true"] .ambient-heading-row {
+  grid-template-columns: minmax(0, 1fr) minmax(126px, .72fr);
+  gap: 8px;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .ambient-control .noise-level-wrap,
+body[data-app-state="paused"][data-sound-settings-open="true"] .ambient-control .noise-level-wrap,
+body[data-app-state="completed"][data-sound-settings-open="true"] .ambient-control .noise-level-wrap {
+  margin-top: 6px;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .noise-preset-button,
+body[data-app-state="paused"][data-sound-settings-open="true"] .noise-preset-button,
+body[data-app-state="completed"][data-sound-settings-open="true"] .noise-preset-button {
+  min-height: 38px;
+  font-size: .66rem;
+}
+
+@media (max-width: 699px) {
+  .sound-settings-content .volume-control {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .ambient-heading-row {
+    grid-template-columns: minmax(0, 1fr) minmax(132px, .72fr);
+    gap: 8px;
+  }
+
+  .ambient-control .noise-level-wrap { margin-top: 7px; }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings-content,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings-content,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings-content {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .counter-panel,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .counter-panel,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .counter-panel {
+    gap: 5px;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .readout strong,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .readout strong,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .readout strong {
+    font-size: clamp(2.9rem, 15.4vw, 5.8rem);
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .volume-copy,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .volume-copy,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .volume-copy {
+    display: none;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .volume-slider-wrap,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .volume-slider-wrap,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .volume-slider-wrap {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 7px;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .volume-slider-wrap::before,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .volume-slider-wrap::before,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .volume-slider-wrap::before {
+    content: "読み上げ";
+    color: #5a8551;
+    font-size: .72rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .ambient-note,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .ambient-note,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .ambient-note {
+    display: none;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .ambient-heading-row,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .ambient-heading-row,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .ambient-heading-row {
+    grid-template-columns: minmax(0, 1fr) 132px;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .noise-preset-grid,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .noise-preset-grid,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .noise-preset-grid {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 390px) and (max-height: 740px) {
+  body[data-app-state="running"][data-sound-settings-open="true"] .sound-settings > summary,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .sound-settings > summary,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .sound-settings > summary {
+    min-height: 37px;
+    padding: 4px 9px;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .ambient-control .noise-level-heading,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .ambient-control .noise-level-heading,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .ambient-control .noise-level-heading {
+    margin-bottom: 4px;
+  }
+
+  body[data-app-state="running"][data-sound-settings-open="true"] .noise-preset-button,
+  body[data-app-state="paused"][data-sound-settings-open="true"] .noise-preset-button,
+  body[data-app-state="completed"][data-sound-settings-open="true"] .noise-preset-button {
+    min-height: 35px;
+  }
+}
+
+/* 復帰案内も出ている時だけは、設定面の下に一段追加して操作できるようにする。 */
+body[data-app-state="running"][data-sound-settings-open="true"][data-audio-recovery="true"] .counter-panel,
+body[data-app-state="paused"][data-sound-settings-open="true"][data-audio-recovery="true"] .counter-panel,
+body[data-app-state="completed"][data-sound-settings-open="true"][data-audio-recovery="true"] .counter-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    "header"
+    "readout"
+    "actions"
+    "sound"
+    "recovery";
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* PCでは2枚の設定カードを横並びにして、折りたたみを開いても縦へ伸ばしすぎない。 */
+@media (min-width: 700px) {
+  .sound-settings-content {
+    grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+  }
+}

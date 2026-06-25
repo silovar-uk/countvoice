@@ -9,8 +9,10 @@ const FINISH_GAP_SECONDS = 0.18;
 const FINISH_REPEAT_GAP_SECONDS = 0.42;
 const FINISH_PLAY_COUNT = 2;
 const DEFAULT_APP_VOLUME_PERCENT = 50;
-const DEFAULT_AMBIENT_NOISE_MODE = "none";
-const DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT = 18;
+const DEFAULT_AMBIENT_NOISE_MODE = "brown";
+const DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT = 30;
+const AMBIENT_NOISE_PRESETS = [15, 30, 45];
+const AMBIENT_NOISE_DEFAULTS_VERSION = "v35";
 
 const $ = (id) => document.getElementById(id);
 
@@ -213,15 +215,31 @@ function flushVolumeSave() {
 }
 
 async function restoreAmbientNoise() {
-  const [storedMode, storedVolume, storedVolumeTouched] = await Promise.all([
+  const [storedMode, storedVolume, storedVolumeTouched, storedDefaultsVersion] = await Promise.all([
     getValue("ambientNoiseMode").catch(() => null),
     getValue("ambientNoiseVolume").catch(() => null),
     getValue("ambientNoiseVolumeTouched").catch(() => null),
+    getValue("ambientNoiseDefaultsVersion").catch(() => null),
   ]);
 
   // iPhoneではIndexedDBの復元が遅れ、画面を先に操作した内容を
   // 復元値が上書きすることがあります。ユーザー操作後は保存値で戻しません。
   if (state.ambientSettingsTouched) return;
+
+  // v35で「ブラウンノイズ・中（30%）」を初期状態へ変更。
+  // 一度だけ移行してからは、ユーザー自身の選択をそのまま保存し続ける。
+  if (storedDefaultsVersion !== AMBIENT_NOISE_DEFAULTS_VERSION) {
+    state.ambientNoiseVolumeTouched = false;
+    setAmbientNoiseVolume(DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
+    setAmbientNoiseMode(DEFAULT_AMBIENT_NOISE_MODE, { save: false });
+    Promise.all([
+      setValue("ambientNoiseMode", DEFAULT_AMBIENT_NOISE_MODE),
+      setValue("ambientNoiseVolume", DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT),
+      setValue("ambientNoiseVolumeTouched", false),
+      setValue("ambientNoiseDefaultsVersion", AMBIENT_NOISE_DEFAULTS_VERSION),
+    ]).catch(() => {});
+    return;
+  }
 
   const mode = ["none", "white", "brown"].includes(storedMode)
     ? storedMode
@@ -234,7 +252,7 @@ async function restoreAmbientNoise() {
 
   // 旧版では Number(null) が 0 になり、未設定なのに「0%」として
   // 保存されることがありました。明示的に0%を選んだ記録がない限り、
-  // その値は初期値（18%）へ移行します。
+  // その値は初期値（30%）へ移行します。
   const isLegacyZero = !didUserSetVolume && rawVolume === 0;
   const nextVolume = storedVolumeIsValid && !isLegacyZero
     ? rawVolume
@@ -377,18 +395,31 @@ function setAmbientNoiseMode(mode, { save = true } = {}) {
   updateBackgroundStatus();
 }
 
-function setAmbientNoiseVolume(percent, { save = true } = {}) {
+function normalizeAmbientNoiseVolumePercent(percent) {
   const parsedPercent = Number(percent);
-  const normalizedPercent = clamp(
-    Math.round(Number.isFinite(parsedPercent) ? parsedPercent : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT),
-    0,
-    100,
-  );
+  const requested = Number.isFinite(parsedPercent)
+    ? parsedPercent
+    : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT;
+
+  return AMBIENT_NOISE_PRESETS.reduce((closest, candidate) => (
+    Math.abs(candidate - requested) < Math.abs(closest - requested) ? candidate : closest
+  ), AMBIENT_NOISE_PRESETS[0]);
+}
+
+function ambientNoiseVolumeLabel(percent) {
+  const level = normalizeAmbientNoiseVolumePercent(percent);
+  if (level === 15) return "小・15%";
+  if (level === 30) return "中・30%";
+  return "大・45%";
+}
+
+function setAmbientNoiseVolume(percent, { save = true } = {}) {
+  const normalizedPercent = normalizeAmbientNoiseVolumePercent(percent);
   state.ambientNoiseVolume = normalizedPercent / 100;
   els.noiseVolumeSlider.value = String(normalizedPercent);
   els.noiseVolumeSlider.setAttribute("aria-valuenow", String(normalizedPercent));
   els.noiseVolumeSlider.setAttribute("aria-valuetext", `${normalizedPercent}%`);
-  els.noiseVolumeValue.textContent = `${normalizedPercent}%`;
+  els.noiseVolumeValue.textContent = ambientNoiseVolumeLabel(normalizedPercent);
   updateAmbientNoisePresetButtons();
   audioStore.setAmbientNoise({ mode: state.ambientNoiseMode, level: state.ambientNoiseVolume });
 
@@ -412,6 +443,7 @@ function flushAmbientNoiseSave() {
     setValue("ambientNoiseMode", state.ambientNoiseMode),
     setValue("ambientNoiseVolume", Math.round(state.ambientNoiseVolume * 100)),
     setValue("ambientNoiseVolumeTouched", state.ambientNoiseVolumeTouched),
+    setValue("ambientNoiseDefaultsVersion", AMBIENT_NOISE_DEFAULTS_VERSION),
   ]).catch(() => {});
 }
 
@@ -424,7 +456,10 @@ function ambientNoiseLabel() {
 function updateSoundSettingsSummary() {
   if (!els.soundSettingsSummary) return;
   const voicePercent = Math.round(state.volume * 100);
-  els.soundSettingsSummary.textContent = `読み上げ ${voicePercent}%・ながし音 ${ambientNoiseLabel()}`;
+  const ambientSummary = state.ambientNoiseMode === "none"
+    ? "なし"
+    : `${ambientNoiseLabel()} ${ambientNoiseVolumeLabel(Math.round(state.ambientNoiseVolume * 100))}`;
+  els.soundSettingsSummary.textContent = `読み上げ ${voicePercent}%・ながし音 ${ambientSummary}`;
 }
 
 async function syncAmbientNoise({ restart = false } = {}) {

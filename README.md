@@ -1,4 +1,4 @@
-# CountVoice v33 - iPhone ambient-noise volume fix
+# CountVoice v35 - compact sound settings
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -173,3 +173,10 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - iPhone向けにノイズ量を大きなプリセットボタン（8% / 18% / 30% / 45%）と +/- ボタンで選べるように変更しました。
 - 「ながし音を試す（3秒）」を追加。読み上げ開始前に、ホワイト/ブラウンノイズが実際に出るか確認できます。
 - ノイズと読み上げは同じWeb Audio出力へ混ぜて流します。
+
+
+## v35：スマホ向け音量・ながし音レイアウト
+
+- 折りたたみを開いた時に、カウント表示を過度に押し下げないレイアウトへ変更しました。
+- ながし音は「なし / ホワイト / ブラウン」、音量は「小 15% / 中 30% / 大 45%」の3択です。
+- 新規設定の初期値はブラウンノイズ・中（30%）です。

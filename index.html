@@ -142,40 +142,35 @@
               </div>
             </section>
 
-            <section id="ambientControl" class="ambient-control" data-noise-enabled="false" aria-label="カウント中にながす音">
-              <div class="ambient-copy">
-                <span class="ambient-icon" aria-hidden="true">◌</span>
-                <div>
-                  <span class="ambient-label">ながし音</span>
-                  <span class="ambient-note">カウント中だけ、うしろで流れます</span>
+            <section id="ambientControl" class="ambient-control" data-noise-enabled="true" aria-label="カウント中にながす音">
+              <div class="ambient-heading-row">
+                <div class="ambient-copy">
+                  <span class="ambient-icon" aria-hidden="true">◌</span>
+                  <div>
+                    <span class="ambient-label">ながし音</span>
+                    <span class="ambient-note">カウント中だけ、うしろで流れます</span>
+                  </div>
                 </div>
+                <label class="ambient-mode-field" for="noiseMode">
+                  <span>種類</span>
+                  <select id="noiseMode" aria-label="ながし音の種類">
+                    <option value="none">なし</option>
+                    <option value="white">ホワイト</option>
+                    <option value="brown" selected>ブラウン</option>
+                  </select>
+                </label>
               </div>
-              <div class="ambient-fields">
-                <label class="sr-only" for="noiseMode">ながし音の種類</label>
-                <select id="noiseMode" aria-label="ながし音の種類">
-                  <option value="none">なし</option>
-                  <option value="white">ホワイトノイズ</option>
-                  <option value="brown">ブラウンノイズ</option>
-                </select>
-                <div class="noise-level-wrap">
-                  <div class="noise-level-heading">
-                    <label for="noiseVolumeSlider">ながし音の大きさ</label>
-                    <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="polite">18%</output>
-                  </div>
-                  <div class="noise-preset-grid" role="group" aria-label="ながし音の大きさを選ぶ">
-                    <button class="noise-preset-button" type="button" data-noise-preset="8" aria-pressed="false">小<br><strong>8%</strong></button>
-                    <button class="noise-preset-button" type="button" data-noise-preset="18" aria-pressed="true">標準<br><strong>18%</strong></button>
-                    <button class="noise-preset-button" type="button" data-noise-preset="30" aria-pressed="false">大<br><strong>30%</strong></button>
-                    <button class="noise-preset-button" type="button" data-noise-preset="45" aria-pressed="false">強<br><strong>45%</strong></button>
-                  </div>
-                  <div class="noise-level-slider" aria-label="ながし音の微調整">
-                    <button id="noiseVolumeDownBtn" class="noise-step-button" type="button" aria-label="ながし音を5%下げる">−</button>
-                    <input id="noiseVolumeSlider" class="noise-range-desktop" type="range" min="0" max="100" step="1" value="18" aria-label="ながし音の大きさを微調整" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-valuetext="18%" />
-                    <button id="noiseVolumeUpBtn" class="noise-step-button" type="button" aria-label="ながし音を5%上げる">＋</button>
-                  </div>
-                  <button id="noisePreviewBtn" class="noise-preview-button" type="button">▶ ながし音を試す（3秒）</button>
-                  <p class="noise-mobile-note">iPhoneでは、上の大きいボタンか −／＋ で確実に調整できます。</p>
+              <div class="noise-level-wrap">
+                <div class="noise-level-heading">
+                  <span>ながし音の大きさ</span>
+                  <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="polite">中・30%</output>
                 </div>
+                <div class="noise-preset-grid" role="group" aria-label="ながし音の大きさを選ぶ">
+                  <button class="noise-preset-button" type="button" data-noise-preset="15" aria-pressed="false">小<strong>15%</strong></button>
+                  <button class="noise-preset-button" type="button" data-noise-preset="30" aria-pressed="true">中<strong>30%</strong></button>
+                  <button class="noise-preset-button" type="button" data-noise-preset="45" aria-pressed="false">大<strong>45%</strong></button>
+                </div>
+                <input id="noiseVolumeSlider" type="hidden" value="30" />
               </div>
             </section>
           </div>
