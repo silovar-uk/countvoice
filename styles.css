@@ -1540,3 +1540,621 @@ body[data-app-state="completed"] #countDisplay { color: #5b8f25; }
     scroll-behavior: auto !important;
   }
 }
+
+
+/* v31: iPhoneで「なし」から選んだ後も、ながし音の大きさを常に調整できるようにする。 */
+.ambient-control[data-noise-enabled="false"] .noise-level-wrap {
+  opacity: 1;
+}
+
+.ambient-control[data-noise-enabled="false"] .noise-level-slider input {
+  cursor: pointer;
+}
+
+.ambient-control[data-noise-enabled="false"] .noise-level-wrap > label::after {
+  content: "（先に設定）";
+  margin-left: 3px;
+  color: #7b9872;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+/* 集中画面は、ページ本体ではなくパネル内だけをスクロールさせる。
+   iOS Safariの動的な表示領域でも、全体が画面外へ押し出されにくくする。 */
+body[data-app-state="running"] .app-shell,
+body[data-app-state="paused"] .app-shell,
+body[data-app-state="completed"] .app-shell {
+  height: 100svh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+body[data-app-state="running"] .counter-panel,
+body[data-app-state="paused"] .counter-panel,
+body[data-app-state="completed"] .counter-panel {
+  height: 100svh;
+  height: 100dvh;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iPhone SE / 小さめの縦画面では、集中画面を自動的に一段コンパクトにする。 */
+@media (max-width: 430px) and (max-height: 740px) {
+  body[data-app-state="running"] .counter-panel,
+  body[data-app-state="paused"] .counter-panel,
+  body[data-app-state="completed"] .counter-panel {
+    padding:
+      max(8px, env(safe-area-inset-top))
+      12px
+      max(8px, env(safe-area-inset-bottom));
+    gap: 0;
+  }
+
+  body[data-app-state="running"] .counter-panel-header,
+  body[data-app-state="paused"] .counter-panel-header,
+  body[data-app-state="completed"] .counter-panel-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  body[data-app-state="running"] .state-pill,
+  body[data-app-state="paused"] .state-pill,
+  body[data-app-state="completed"] .state-pill,
+  body[data-app-state="running"] .target-pill,
+  body[data-app-state="paused"] .target-pill,
+  body[data-app-state="completed"] .target-pill {
+    min-height: 25px;
+    padding: 0 8px;
+    font-size: 0.67rem;
+    white-space: nowrap;
+  }
+
+  body[data-app-state="running"] .readout,
+  body[data-app-state="paused"] .readout,
+  body[data-app-state="completed"] .readout {
+    flex: 1 1 0;
+    min-height: clamp(174px, 30dvh, 230px);
+    max-height: 33dvh;
+    border-radius: 25px;
+  }
+
+  body[data-app-state="running"] .readout-copy,
+  body[data-app-state="paused"] .readout-copy,
+  body[data-app-state="completed"] .readout-copy {
+    gap: 3px;
+    padding: 12px 8px 16px;
+  }
+
+  body[data-app-state="running"] .readout strong,
+  body[data-app-state="paused"] .readout strong,
+  body[data-app-state="completed"] .readout strong {
+    width: 8ch;
+    font-size: clamp(2.7rem, 16vw, 4.9rem);
+    line-height: 0.9;
+  }
+
+  body[data-app-state="running"] #modeLabel,
+  body[data-app-state="paused"] #modeLabel,
+  body[data-app-state="completed"] #modeLabel {
+    font-size: 0.68rem;
+  }
+
+  body[data-app-state="running"] #unitLabel,
+  body[data-app-state="paused"] #unitLabel,
+  body[data-app-state="completed"] #unitLabel {
+    display: none;
+  }
+
+  body[data-app-state="running"] .sprout-buddy,
+  body[data-app-state="paused"] .sprout-buddy,
+  body[data-app-state="completed"] .sprout-buddy {
+    right: 12px;
+    bottom: 10px;
+    transform: scale(0.72) rotate(3deg);
+  }
+
+  body[data-app-state="running"] .session-meter,
+  body[data-app-state="paused"] .session-meter,
+  body[data-app-state="completed"] .session-meter {
+    margin-top: 6px;
+  }
+
+  body[data-app-state="running"] .meter-labels,
+  body[data-app-state="paused"] .meter-labels,
+  body[data-app-state="completed"] .meter-labels {
+    margin-bottom: 3px;
+    font-size: 0.64rem;
+  }
+
+  body[data-app-state="running"] .cheer-message,
+  body[data-app-state="paused"] .cheer-message,
+  body[data-app-state="completed"] .cheer-message {
+    min-height: 1.25em;
+    margin-top: 5px;
+    font-size: 0.74rem;
+    line-height: 1.25;
+  }
+
+  body[data-app-state="running"] .volume-control,
+  body[data-app-state="paused"] .volume-control,
+  body[data-app-state="completed"] .volume-control,
+  body[data-app-state="running"] .ambient-control,
+  body[data-app-state="paused"] .ambient-control,
+  body[data-app-state="completed"] .ambient-control {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 7px;
+    margin-top: 6px;
+    padding: 7px 9px;
+    border-radius: 15px;
+  }
+
+  body[data-app-state="running"] .volume-copy,
+  body[data-app-state="paused"] .volume-copy,
+  body[data-app-state="completed"] .volume-copy,
+  body[data-app-state="running"] .ambient-copy,
+  body[data-app-state="paused"] .ambient-copy,
+  body[data-app-state="completed"] .ambient-copy {
+    gap: 6px;
+  }
+
+  body[data-app-state="running"] .volume-icon,
+  body[data-app-state="paused"] .volume-icon,
+  body[data-app-state="completed"] .volume-icon,
+  body[data-app-state="running"] .ambient-icon,
+  body[data-app-state="paused"] .ambient-icon,
+  body[data-app-state="completed"] .ambient-icon {
+    width: 25px;
+    height: 25px;
+    font-size: 0.95rem;
+  }
+
+  body[data-app-state="running"] .volume-label,
+  body[data-app-state="paused"] .volume-label,
+  body[data-app-state="completed"] .volume-label,
+  body[data-app-state="running"] .ambient-label,
+  body[data-app-state="paused"] .ambient-label,
+  body[data-app-state="completed"] .ambient-label {
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  body[data-app-state="running"] .volume-slider-wrap,
+  body[data-app-state="paused"] .volume-slider-wrap,
+  body[data-app-state="completed"] .volume-slider-wrap {
+    gap: 6px;
+  }
+
+  body[data-app-state="running"] .ambient-fields,
+  body[data-app-state="paused"] .ambient-fields,
+  body[data-app-state="completed"] .ambient-fields {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  body[data-app-state="running"] .ambient-fields select,
+  body[data-app-state="paused"] .ambient-fields select,
+  body[data-app-state="completed"] .ambient-fields select {
+    min-height: 32px;
+    padding-inline: 8px;
+    font-size: 0.74rem;
+  }
+
+  body[data-app-state="running"] .noise-level-wrap,
+  body[data-app-state="paused"] .noise-level-wrap,
+  body[data-app-state="completed"] .noise-level-wrap {
+    gap: 5px;
+  }
+
+  body[data-app-state="running"] .noise-level-wrap > label,
+  body[data-app-state="paused"] .noise-level-wrap > label,
+  body[data-app-state="completed"] .noise-level-wrap > label {
+    font-size: 0.61rem;
+  }
+
+  body[data-app-state="running"] .noise-level-slider,
+  body[data-app-state="paused"] .noise-level-slider,
+  body[data-app-state="completed"] .noise-level-slider {
+    gap: 5px;
+  }
+
+  body[data-app-state="running"] .volume-slider-wrap output,
+  body[data-app-state="paused"] .volume-slider-wrap output,
+  body[data-app-state="completed"] .volume-slider-wrap output,
+  body[data-app-state="running"] .noise-level-slider output,
+  body[data-app-state="paused"] .noise-level-slider output,
+  body[data-app-state="completed"] .noise-level-slider output {
+    min-width: 33px;
+    font-size: 0.72rem;
+  }
+
+  body[data-app-state="running"] input[type="range"],
+  body[data-app-state="paused"] input[type="range"],
+  body[data-app-state="completed"] input[type="range"] {
+    min-height: 22px;
+  }
+
+  body[data-app-state="running"] input[type="range"]::-webkit-slider-thumb,
+  body[data-app-state="paused"] input[type="range"]::-webkit-slider-thumb,
+  body[data-app-state="completed"] input[type="range"]::-webkit-slider-thumb {
+    width: 20px;
+    height: 20px;
+    margin-top: -6px;
+  }
+
+  body[data-app-state="running"] .primary-actions,
+  body[data-app-state="paused"] .primary-actions,
+  body[data-app-state="completed"] .primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 7px;
+  }
+
+  body[data-app-state="running"] .primary-actions button,
+  body[data-app-state="paused"] .primary-actions button,
+  body[data-app-state="completed"] .primary-actions button {
+    min-height: 46px;
+    padding-inline: 8px;
+    border-radius: 14px;
+    font-size: 0.84rem;
+  }
+
+  body[data-app-state="running"] .audio-recovery,
+  body[data-app-state="paused"] .audio-recovery,
+  body[data-app-state="completed"] .audio-recovery {
+    margin-top: 6px;
+    padding: 7px 8px;
+  }
+
+  body[data-app-state="running"] .audio-recovery p,
+  body[data-app-state="paused"] .audio-recovery p,
+  body[data-app-state="completed"] .audio-recovery p {
+    font-size: 0.69rem;
+    line-height: 1.25;
+  }
+}
+
+
+/* v32: 読み込み済みなら、上部導線をコンパクトにして「開始」へ直行できる。 */
+.quick-load-ready {
+  display: none;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pack-ready-copy {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.pack-ready-icon,
+.sound-settings-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px 12px 7px 12px;
+  background: linear-gradient(145deg, #9fe56a, #62b648);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.62);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.pack-ready-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: #6b9460;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.pack-ready-copy strong {
+  display: block;
+  overflow: hidden;
+  color: #2e7028;
+  font-size: .94rem;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pack-ready-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.pack-reload-button,
+.pack-change-button {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 13px;
+  font-size: .78rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.pack-reload-button {
+  border-color: #5ea943;
+  background: linear-gradient(135deg, #74c84a, #4da43a);
+  color: #fff;
+  box-shadow: 0 3px 0 #3f8e31, 0 7px 15px rgba(65,145,46,.16);
+}
+
+.pack-reload-button::before { content: "↓"; margin-right: 5px; }
+.pack-change-button { border-color: #b2dca1; background: rgba(255,255,255,.9); color: #397632; }
+
+.quick-load-card[data-pack-state="ready"] {
+  padding: 12px 15px;
+  margin-bottom: 10px;
+  border-width: 1px;
+  border-color: #a8d98d;
+  background: linear-gradient(135deg, #fff 0%, #f3fce9 72%, #e6f7d9 100%);
+}
+
+.quick-load-card[data-pack-state="ready"] .leaf-dots { display: none; }
+.quick-load-card[data-pack-state="ready"] .quick-load-ready { display: grid; }
+.quick-load-card[data-pack-state="ready"] .quick-load-editor { display: none; }
+.quick-load-card[data-pack-state="ready"][data-editor-open="true"] .quick-load-editor {
+  display: block;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #b6dda4;
+}
+
+.quick-load-card[data-pack-state="ready"] .quick-load-heading { align-items: center; }
+.quick-load-card[data-pack-state="ready"] .quick-load-heading .step-kicker { display: none; }
+.quick-load-card[data-pack-state="ready"] .quick-load-heading h2 { font-size: 1rem; }
+.quick-load-card[data-pack-state="ready"] .quick-load-heading p { font-size: .82rem; }
+.quick-load-card[data-pack-state="ready"] .quick-load-status {
+  margin-top: 6px;
+  color: #5e8054;
+  font-size: .75rem;
+  line-height: 1.35;
+}
+.quick-load-card[data-loading="true"] .pack-reload-button { opacity: .65; }
+
+/* 設定は開始導線を邪魔しない折りたたみへ。 */
+.sound-settings {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid #b7dfa3;
+  border-radius: 19px;
+  background: linear-gradient(135deg, #fbfff8 0%, #ecf9e2 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 8px 18px rgba(91,156,65,.08);
+}
+
+.sound-settings > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  padding: 8px 13px;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sound-settings > summary::-webkit-details-marker { display: none; }
+.sound-settings > summary::marker { content: ""; }
+.sound-settings > summary::after {
+  content: "⌄";
+  margin-left: 2px;
+  color: #4f943a;
+  font-size: 1.1rem;
+  font-weight: 950;
+  transition: transform 160ms ease;
+}
+.sound-settings[open] > summary::after { transform: rotate(180deg); }
+.sound-settings-title { display: inline-flex; align-items: center; min-width: 0; gap: 9px; color: #34762e; font-size: .91rem; font-weight: 950; }
+.sound-settings-icon { width: 29px; height: 29px; border-radius: 10px 10px 5px 10px; font-size: .9rem; }
+.sound-settings-summary { overflow: hidden; color: #5a8551; font-size: .72rem; font-weight: 850; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.sound-settings-content { display: grid; gap: 10px; padding: 0 11px 11px; }
+.sound-settings-content .volume-control { margin-top: 0; }
+.sound-settings-content .ambient-control { margin-top: 0; }
+
+/* 読み込み済みなら、停止中の最初の画面を「音声確認→秒数→開始」に寄せる。 */
+body[data-pack-ready="true"][data-app-state="stopped"] .topbar { margin-bottom: 10px; }
+body[data-pack-ready="true"][data-app-state="stopped"] .counter-panel { padding: 15px; }
+body[data-pack-ready="true"][data-app-state="stopped"] .counter-panel-header { margin-bottom: 9px; }
+body[data-pack-ready="true"][data-app-state="stopped"] .readout { min-height: min(38svh, 300px); }
+body[data-pack-ready="true"][data-app-state="stopped"] .session-meter { margin-top: 10px; }
+body[data-pack-ready="true"][data-app-state="stopped"] .cheer-message { margin-top: 5px; }
+body[data-pack-ready="true"][data-app-state="stopped"] .start-duration { margin-top: 9px; }
+body[data-pack-ready="true"][data-app-state="stopped"] .primary-actions { margin-top: 9px; }
+
+/* 実行中は「一画面が標準」。数字を残り領域へ伸ばし、詳細設定を畳む。 */
+body[data-app-state="running"] .counter-panel,
+body[data-app-state="paused"] .counter-panel,
+body[data-app-state="completed"] .counter-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto auto;
+  grid-template-areas:
+    "header"
+    "readout"
+    "meter"
+    "cheer"
+    "actions"
+    "sound"
+    "recovery";
+  gap: clamp(5px, 1.05dvh, 11px);
+  height: 100svh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body[data-app-state="running"][data-sound-settings-open="true"] .counter-panel,
+body[data-app-state="paused"][data-sound-settings-open="true"] .counter-panel,
+body[data-app-state="completed"][data-sound-settings-open="true"] .counter-panel,
+body[data-app-state="running"][data-audio-recovery="true"] .counter-panel,
+body[data-app-state="paused"][data-audio-recovery="true"] .counter-panel,
+body[data-app-state="completed"][data-audio-recovery="true"] .counter-panel {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body[data-app-state="running"] .counter-panel-header,
+body[data-app-state="paused"] .counter-panel-header,
+body[data-app-state="completed"] .counter-panel-header { grid-area: header; width: min(100%, 960px); margin: 0 auto; }
+body[data-app-state="running"] .readout,
+body[data-app-state="paused"] .readout,
+body[data-app-state="completed"] .readout {
+  grid-area: readout;
+  width: min(100%, 1120px);
+  min-height: 0;
+  height: 100%;
+  margin: 0 auto;
+}
+body[data-app-state="running"] .session-meter,
+body[data-app-state="paused"] .session-meter,
+body[data-app-state="completed"] .session-meter { grid-area: meter; width: min(100%, 960px); margin: 0 auto; }
+body[data-app-state="running"] .cheer-message,
+body[data-app-state="paused"] .cheer-message,
+body[data-app-state="completed"] .cheer-message { grid-area: cheer; width: min(100%, 960px); min-height: 1.2em; margin: 0 auto; }
+body[data-app-state="running"] .primary-actions,
+body[data-app-state="paused"] .primary-actions,
+body[data-app-state="completed"] .primary-actions { grid-area: actions; width: min(100%, 960px); margin: 0 auto; }
+body[data-app-state="running"] .sound-settings,
+body[data-app-state="paused"] .sound-settings,
+body[data-app-state="completed"] .sound-settings { grid-area: sound; width: min(100%, 960px); margin: 0 auto; }
+body[data-app-state="running"] .audio-recovery,
+body[data-app-state="paused"] .audio-recovery,
+body[data-app-state="completed"] .audio-recovery { grid-area: recovery; width: min(100%, 960px); margin: 0 auto; }
+
+body[data-app-state="running"] .readout-copy,
+body[data-app-state="paused"] .readout-copy,
+body[data-app-state="completed"] .readout-copy {
+  grid-template-columns: 1fr;
+  padding: clamp(14px, 3.2dvh, 36px) 20px;
+}
+
+@media (min-width: 700px) {
+  body[data-app-state="running"] .readout strong,
+  body[data-app-state="paused"] .readout strong,
+  body[data-app-state="completed"] .readout strong {
+    font-size: clamp(3.8rem, min(15vw, 27dvh), 11rem);
+  }
+
+  body[data-app-state="running"] .sound-settings-content,
+  body[data-app-state="paused"] .sound-settings-content,
+  body[data-app-state="completed"] .sound-settings-content {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  body[data-app-state="running"] .sound-settings-content .volume-control,
+  body[data-app-state="paused"] .sound-settings-content .volume-control,
+  body[data-app-state="completed"] .sound-settings-content .volume-control,
+  body[data-app-state="running"] .sound-settings-content .ambient-control,
+  body[data-app-state="paused"] .sound-settings-content .ambient-control,
+  body[data-app-state="completed"] .sound-settings-content .ambient-control {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding: 9px 10px;
+    border-radius: 14px;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 699px) {
+  .quick-load-ready { gap: 8px; }
+  .pack-ready-actions { gap: 5px; }
+  .pack-reload-button, .pack-change-button { min-height: 37px; padding: 0 9px; font-size: .72rem; }
+  .pack-ready-copy { gap: 8px; }
+  .pack-ready-icon { width: 30px; height: 30px; border-radius: 10px 10px 6px 10px; }
+  .pack-ready-copy strong { max-width: 13ch; font-size: .84rem; }
+  .quick-load-card[data-pack-state="ready"] { padding: 10px 11px; }
+
+  body[data-pack-ready="true"][data-app-state="stopped"] .app-shell { padding-top: calc(10px + env(safe-area-inset-top)); }
+  body[data-pack-ready="true"][data-app-state="stopped"] .topbar { margin-bottom: 8px; }
+  body[data-pack-ready="true"][data-app-state="stopped"] .readout { min-height: min(34svh, 250px); }
+  body[data-pack-ready="true"][data-app-state="stopped"] .start-duration { padding: 9px 10px; }
+  body[data-pack-ready="true"][data-app-state="stopped"] .start-duration .field-hint { display: none; }
+  body[data-pack-ready="true"][data-app-state="stopped"] .primary-actions button { min-height: 52px; }
+
+  body[data-app-state="running"] .counter-panel,
+  body[data-app-state="paused"] .counter-panel,
+  body[data-app-state="completed"] .counter-panel {
+    padding:
+      max(8px, env(safe-area-inset-top))
+      12px
+      max(8px, env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+  body[data-app-state="running"] .counter-panel-header,
+  body[data-app-state="paused"] .counter-panel-header,
+  body[data-app-state="completed"] .counter-panel-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  body[data-app-state="running"] .state-pill,
+  body[data-app-state="paused"] .state-pill,
+  body[data-app-state="completed"] .state-pill,
+  body[data-app-state="running"] .target-pill,
+  body[data-app-state="paused"] .target-pill,
+  body[data-app-state="completed"] .target-pill { min-height: 25px; padding: 0 8px; font-size: .67rem; white-space: nowrap; }
+  body[data-app-state="running"] .readout strong,
+  body[data-app-state="paused"] .readout strong,
+  body[data-app-state="completed"] .readout strong { font-size: clamp(3.05rem, 16.4vw, 6.6rem); }
+  body[data-app-state="running"] .readout,
+  body[data-app-state="paused"] .readout,
+  body[data-app-state="completed"] .readout { border-radius: 25px; }
+  body[data-app-state="running"] .sprout-buddy,
+  body[data-app-state="paused"] .sprout-buddy,
+  body[data-app-state="completed"] .sprout-buddy { transform: scale(.75) rotate(3deg); }
+  body[data-app-state="running"] .session-meter,
+  body[data-app-state="paused"] .session-meter,
+  body[data-app-state="completed"] .session-meter { padding: 0 2px; }
+  body[data-app-state="running"] .meter-labels,
+  body[data-app-state="paused"] .meter-labels,
+  body[data-app-state="completed"] .meter-labels { margin-bottom: 3px; font-size: .65rem; }
+  body[data-app-state="running"] .cheer-message,
+  body[data-app-state="paused"] .cheer-message,
+  body[data-app-state="completed"] .cheer-message { font-size: .73rem; line-height: 1.25; }
+  body[data-app-state="running"] .primary-actions,
+  body[data-app-state="paused"] .primary-actions,
+  body[data-app-state="completed"] .primary-actions { margin-top: 0; }
+  body[data-app-state="running"] .primary-actions button,
+  body[data-app-state="paused"] .primary-actions button,
+  body[data-app-state="completed"] .primary-actions button { min-height: 50px; }
+  body[data-app-state="running"] .sound-settings > summary,
+  body[data-app-state="paused"] .sound-settings > summary,
+  body[data-app-state="completed"] .sound-settings > summary { min-height: 42px; padding: 5px 10px; }
+  body[data-app-state="running"] .sound-settings-summary,
+  body[data-app-state="paused"] .sound-settings-summary,
+  body[data-app-state="completed"] .sound-settings-summary { font-size: .67rem; }
+}
+
+@media (max-height: 680px) {
+  body[data-app-state="running"] .counter-panel,
+  body[data-app-state="paused"] .counter-panel,
+  body[data-app-state="completed"] .counter-panel { gap: 4px; }
+  body[data-app-state="running"] .readout-copy,
+  body[data-app-state="paused"] .readout-copy,
+  body[data-app-state="completed"] .readout-copy { padding-block: 8px; }
+  body[data-app-state="running"] #modeLabel,
+  body[data-app-state="paused"] #modeLabel,
+  body[data-app-state="completed"] #modeLabel { font-size: .68rem; }
+  body[data-app-state="running"] #unitLabel,
+  body[data-app-state="paused"] #unitLabel,
+  body[data-app-state="completed"] #unitLabel { display: none; }
+  body[data-app-state="running"] .sound-settings > summary,
+  body[data-app-state="paused"] .sound-settings > summary,
+  body[data-app-state="completed"] .sound-settings > summary { min-height: 38px; }
+  body[data-app-state="running"] .primary-actions button,
+  body[data-app-state="paused"] .primary-actions button,
+  body[data-app-state="completed"] .primary-actions button { min-height: 46px; }
+}

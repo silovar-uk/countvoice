@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v30-safari-favorites";
+const CACHE_NAME = "count-voice-app-v32-compact-ready-layout";
 const ASSETS = [
   "./",
   "./index.html",

@@ -49,9 +49,16 @@ const els = {
   packInput: $("packInput"),
   packUrl: $("packUrl"),
   loadPackUrlBtn: $("loadPackUrlBtn"),
+  quickLoadCard: $("quickLoadCard"),
+  quickLoadEditor: $("quickLoadEditor"),
+  packReadyName: $("packReadyName"),
+  reloadPackBtn: $("reloadPackBtn"),
+  togglePackEditorBtn: $("togglePackEditorBtn"),
   clearPackBtn: $("clearPackBtn"),
   testVoiceBtn: $("testVoiceBtn"),
   packStatus: $("packStatus"),
+  soundSettings: $("soundSettings"),
+  soundSettingsSummary: $("soundSettingsSummary"),
   engineUrl: $("engineUrl"),
   connectBtn: $("connectBtn"),
   speakerSelect: $("speakerSelect"),
@@ -90,6 +97,7 @@ const state = {
   ambientNoiseMode: DEFAULT_AMBIENT_NOISE_MODE,
   ambientNoiseVolume: DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT / 100,
   ambientNoiseSaveTimer: null,
+  ambientSettingsTouched: false,
 };
 
 init();
@@ -98,9 +106,12 @@ async function init() {
   bindEvents();
   bindAudioRecoverySignals();
   configureMediaSession();
+  syncPackLoadUI({ editorOpen: true });
+  updateSoundSettingsSummary();
   await restoreVolume();
   await restoreAmbientNoise();
   await restorePack();
+  updateSoundSettingsSummary();
   render();
   updateFinishMessageUI();
   updateBackgroundStatus();
@@ -117,9 +128,13 @@ function bindEvents() {
   els.resumeAudioBtn.addEventListener("click", recoverAudioFromUserAction);
   els.volumeSlider.addEventListener("input", () => setAppVolume(els.volumeSlider.value));
   els.volumeSlider.addEventListener("change", () => flushVolumeSave());
-  els.noiseMode.addEventListener("change", () => setAmbientNoiseMode(els.noiseMode.value));
-  els.noiseVolumeSlider.addEventListener("input", () => setAmbientNoiseVolume(els.noiseVolumeSlider.value));
-  els.noiseVolumeSlider.addEventListener("change", () => flushAmbientNoiseSave());
+  els.noiseMode.addEventListener("input", handleAmbientNoiseModeControl);
+  els.noiseMode.addEventListener("change", handleAmbientNoiseModeControl);
+  els.noiseVolumeSlider.addEventListener("input", handleAmbientNoiseVolumeControl);
+  els.noiseVolumeSlider.addEventListener("change", () => {
+    handleAmbientNoiseVolumeControl();
+    flushAmbientNoiseSave();
+  });
   els.mode.addEventListener("change", () => {
     reset();
     updateTargetCopy();
@@ -130,6 +145,11 @@ function bindEvents() {
   els.backgroundMode.addEventListener("change", rescheduleRunningAudio);
   els.packInput.addEventListener("change", importPack);
   els.loadPackUrlBtn.addEventListener("click", loadPackFromUrl);
+  els.reloadPackBtn.addEventListener("click", loadPackFromUrl);
+  els.togglePackEditorBtn.addEventListener("click", togglePackEditor);
+  els.soundSettings.addEventListener("toggle", () => {
+    document.body.dataset.soundSettingsOpen = String(els.soundSettings.open);
+  });
   els.clearPackBtn.addEventListener("click", clearPack);
   els.testVoiceBtn.addEventListener("click", () => playTestCue());
   els.testFinishBtn.addEventListener("click", () => playFinishTest());
@@ -156,6 +176,7 @@ function setAppVolume(percent, { save = true } = {}) {
   els.volumeSlider.setAttribute("aria-valuetext", `${normalizedPercent}%`);
   els.volumeValue.textContent = `${normalizedPercent}%`;
   audioStore.setVolume(state.volume);
+  updateSoundSettingsSummary();
 
   if (save) queueVolumeSave();
 }
@@ -182,22 +203,50 @@ async function restoreAmbientNoise() {
     getValue("ambientNoiseVolume").catch(() => null),
   ]);
 
+  // iPhoneではIndexedDBの復元が遅れ、画面を先に操作した内容を
+  // 復元値が上書きすることがあります。ユーザー操作後は保存値で戻しません。
+  if (state.ambientSettingsTouched) return;
+
   const volume = Number(storedVolume);
   setAmbientNoiseVolume(Number.isFinite(volume) ? volume : DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
   setAmbientNoiseMode(typeof storedMode === "string" ? storedMode : DEFAULT_AMBIENT_NOISE_MODE, { save: false });
 }
 
+function handleAmbientNoiseModeControl() {
+  state.ambientSettingsTouched = true;
+  const nextMode = els.noiseMode.value;
+  if (nextMode === state.ambientNoiseMode) return;
+  setAmbientNoiseMode(nextMode);
+}
+
+function updateAmbientNoiseControls(mode) {
+  const enabled = mode !== "none";
+  els.noiseMode.value = mode;
+  els.ambientControl.dataset.noiseEnabled = String(enabled);
+  els.ambientControl.dataset.noiseMode = mode;
+
+  // 「なし」のときも音量を先に決めておけるように、常に操作可能にする。
+  // iOS Safariでdisabled状態が選択変更後も残ることがあるためでもあります。
+  els.noiseVolumeSlider.disabled = false;
+  els.noiseVolumeSlider.removeAttribute("aria-disabled");
+}
+
+function handleAmbientNoiseVolumeControl() {
+  state.ambientSettingsTouched = true;
+  setAmbientNoiseVolume(els.noiseVolumeSlider.value);
+}
+
 function setAmbientNoiseMode(mode, { save = true } = {}) {
   const normalized = ["none", "white", "brown"].includes(mode) ? mode : "none";
+  const changed = normalized !== state.ambientNoiseMode;
   state.ambientNoiseMode = normalized;
-  els.noiseMode.value = normalized;
-  els.ambientControl.dataset.noiseEnabled = String(normalized !== "none");
-  els.noiseVolumeSlider.disabled = normalized === "none";
+  updateAmbientNoiseControls(normalized);
+  updateSoundSettingsSummary();
   audioStore.setAmbientNoise({ mode: normalized, level: state.ambientNoiseVolume });
 
   if (normalized === "none") {
     audioStore.stopAmbientNoise();
-  } else if (state.running) {
+  } else if (state.running && changed) {
     syncAmbientNoise({ restart: true }).catch(() => {
       setAudioRecoveryNeeded(true, "ながし音を開始できませんでした。ほかの音を止めてから「音を復帰」を押してください。");
     });
@@ -244,6 +293,12 @@ function ambientNoiseLabel() {
   return "なし";
 }
 
+function updateSoundSettingsSummary() {
+  if (!els.soundSettingsSummary) return;
+  const voicePercent = Math.round(state.volume * 100);
+  els.soundSettingsSummary.textContent = `読み上げ ${voicePercent}%・ながし音 ${ambientNoiseLabel()}`;
+}
+
 async function syncAmbientNoise({ restart = false } = {}) {
   if (!state.running || state.ambientNoiseMode === "none") {
     audioStore.stopAmbientNoise();
@@ -271,10 +326,14 @@ async function restorePack() {
   }
 
   const pack = await getValue("pack");
-  if (!pack) return;
+  if (!pack) {
+    syncPackLoadUI({ editorOpen: true });
+    return;
+  }
   state.pack = pack;
   await audioStore.loadPack(pack);
   els.packStatus.textContent = `${pack.meta?.name ?? "音声パック"} を読込済みです。開始できます。`;
+  syncPackLoadUI({ editorOpen: false });
 }
 
 async function start() {
@@ -286,6 +345,12 @@ async function start() {
     state.scheduledUntilSecond = 0;
     state.completed = false;
     clearFinishState();
+  }
+
+  // 集中画面に入る前に音の詳細を畳み、数字と操作を一画面へ収めます。
+  if (els.soundSettings.open) {
+    els.soundSettings.open = false;
+    document.body.dataset.soundSettingsOpen = "false";
   }
 
   // iPhoneでは、一度止めた・閉じたあとの古い出力先が見かけ上だけ残ることがあります。
@@ -816,6 +881,7 @@ async function rescheduleAudioFromCurrentPosition({ clearRecovery = false } = {}
 function setAudioRecoveryNeeded(needsRecovery, message = "") {
   state.audioNeedsRecovery = Boolean(needsRecovery);
   els.audioRecovery.hidden = !state.audioNeedsRecovery;
+  document.body.dataset.audioRecovery = String(state.audioNeedsRecovery);
 
   if (state.audioNeedsRecovery) {
     els.audioRecoveryMessage.textContent = message || "音声が止まった場合は、ほかの再生を止めてから「音を復帰」を押してください。";
@@ -910,6 +976,34 @@ function browserSpeak(text) {
   speechSynthesis.speak(utterance);
 }
 
+function packDisplayName(pack) {
+  const raw = String(pack?.meta?.name ?? "").trim();
+  if (!raw) return "ずんだボイス";
+  return raw.length > 28 ? `${raw.slice(0, 27)}…` : raw;
+}
+
+function syncPackLoadUI({ editorOpen } = {}) {
+  const loaded = Boolean(state.pack);
+  const previous = els.quickLoadCard.dataset.editorOpen === "true";
+  const open = typeof editorOpen === "boolean" ? editorOpen : (loaded ? previous : true);
+
+  els.quickLoadCard.dataset.packState = loaded ? "ready" : "empty";
+  els.quickLoadCard.dataset.editorOpen = String(open);
+  els.packReadyName.textContent = packDisplayName(state.pack);
+  els.togglePackEditorBtn.setAttribute("aria-expanded", String(open));
+  els.togglePackEditorBtn.textContent = open ? "閉じる" : "URLを変更";
+  document.body.dataset.packReady = String(loaded);
+}
+
+function togglePackEditor() {
+  const currentlyOpen = els.quickLoadCard.dataset.editorOpen === "true";
+  const nextOpen = !currentlyOpen;
+  syncPackLoadUI({ editorOpen: nextOpen });
+  if (nextOpen) {
+    requestAnimationFrame(() => els.packUrl.focus());
+  }
+}
+
 async function importPack(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -932,17 +1026,23 @@ async function loadPackFromUrl() {
   }
 
   try {
+    els.quickLoadCard.dataset.loading = "true";
     els.loadPackUrlBtn.disabled = true;
+    els.reloadPackBtn.disabled = true;
     els.packStatus.textContent = "URLから音声パックを読み込んでいます...";
     const response = await fetch(rawUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const pack = JSON.parse(await response.text());
     await saveLoadedPack(pack);
     els.packStatus.textContent = `${pack.meta?.name ?? "音声パック"} をURLから読み込みました。開始できます。`;
+    syncPackLoadUI({ editorOpen: false });
   } catch {
+    syncPackLoadUI({ editorOpen: true });
     els.packStatus.textContent = "URLからPONVOICEを読み込めませんでした。同じサイト内のURLか、CORS許可されたURLを指定してください。";
   } finally {
+    delete els.quickLoadCard.dataset.loading;
     els.loadPackUrlBtn.disabled = false;
+    els.reloadPackBtn.disabled = false;
   }
 }
 
@@ -952,6 +1052,7 @@ async function saveLoadedPack(pack) {
   await setValue("pack", pack);
   await audioStore.loadPack(pack);
   els.audioSource.value = "pack";
+  syncPackLoadUI({ editorOpen: false });
   updateFinishMessageUI();
   updateBackgroundStatus();
 }
@@ -962,6 +1063,7 @@ async function clearPack() {
   audioStore.buffers.clear();
   await deleteValue("pack");
   els.packStatus.textContent = "音声パックは未読込です。上の「URLから読み込む」から開始できます。";
+  syncPackLoadUI({ editorOpen: true });
   updateFinishMessageUI();
   updateBackgroundStatus();
 }
