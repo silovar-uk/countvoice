@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v33-noise-volume-fix";
+const CACHE_NAME = "count-voice-app-v34-ios-noise-preview";
 const ASSETS = [
   "./",
   "./index.html",

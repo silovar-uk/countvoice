@@ -24,6 +24,7 @@ export class AudioStore {
     this.ambientGain = null;
     this.ambientContext = null;
     this.ambientActiveMode = "none";
+    this.ambientPreviewTimer = null;
 
     this.bindMediaElementEvents();
   }
@@ -104,6 +105,7 @@ export class AudioStore {
     this.ambientGain = null;
     this.ambientContext = null;
     this.ambientActiveMode = "none";
+    this.clearAmbientPreviewTimer();
     context.addEventListener("statechange", () => {
       if (this.context === context) this.emitContextState();
     });
@@ -218,6 +220,35 @@ export class AudioStore {
     return { mode: this.ambientMode, level: this.ambientLevel };
   }
 
+  clearAmbientPreviewTimer() {
+    if (!this.ambientPreviewTimer) return;
+    clearTimeout(this.ambientPreviewTimer);
+    this.ambientPreviewTimer = null;
+  }
+
+  async previewAmbientNoise({ mode = this.ambientMode, level = this.ambientLevel, durationMs = 3000 } = {}) {
+    this.setAmbientNoise({ mode, level });
+    if (this.ambientMode === "none") return false;
+
+    // This is invoked directly from an explicit tap. It deliberately opens/resumes
+    // the AudioContext here so iPhone Safari treats the preview as user initiated.
+    await this.resumeForUserGesture({ preferMediaElement: false, forceRecreate: false });
+    const started = await this.startAmbientNoise({
+      mode: this.ambientMode,
+      level: this.ambientLevel,
+      restart: true,
+    });
+    if (!started) return false;
+
+    this.clearAmbientPreviewTimer();
+    const wait = Math.max(500, Number(durationMs) || 3000);
+    this.ambientPreviewTimer = setTimeout(() => {
+      this.ambientPreviewTimer = null;
+      this.stopAmbientNoise({ fadeOut: 0.1 });
+    }, wait);
+    return true;
+  }
+
   createAmbientBuffer(mode, context) {
     const seconds = mode === "brown" ? 18 : 12;
     const length = Math.max(1, Math.floor(context.sampleRate * seconds));
@@ -254,6 +285,7 @@ export class AudioStore {
   }
 
   async startAmbientNoise({ mode = this.ambientMode, level = this.ambientLevel, restart = false } = {}) {
+    this.clearAmbientPreviewTimer();
     this.setAmbientNoise({ mode, level });
     if (this.ambientMode === "none") return false;
 

@@ -158,13 +158,23 @@
                   <option value="brown">ブラウンノイズ</option>
                 </select>
                 <div class="noise-level-wrap">
-                  <label for="noiseVolumeSlider">ながし音の大きさ</label>
-                  <div class="noise-level-slider">
-                    <button id="noiseVolumeDownBtn" class="noise-step-button" type="button" aria-label="ながし音を5%下げる">−</button>
-                    <input id="noiseVolumeSlider" type="range" min="0" max="100" step="1" value="18" aria-label="ながし音の大きさ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-valuetext="18%" />
-                    <button id="noiseVolumeUpBtn" class="noise-step-button" type="button" aria-label="ながし音を5%上げる">＋</button>
+                  <div class="noise-level-heading">
+                    <label for="noiseVolumeSlider">ながし音の大きさ</label>
                     <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="polite">18%</output>
                   </div>
+                  <div class="noise-preset-grid" role="group" aria-label="ながし音の大きさを選ぶ">
+                    <button class="noise-preset-button" type="button" data-noise-preset="8" aria-pressed="false">小<br><strong>8%</strong></button>
+                    <button class="noise-preset-button" type="button" data-noise-preset="18" aria-pressed="true">標準<br><strong>18%</strong></button>
+                    <button class="noise-preset-button" type="button" data-noise-preset="30" aria-pressed="false">大<br><strong>30%</strong></button>
+                    <button class="noise-preset-button" type="button" data-noise-preset="45" aria-pressed="false">強<br><strong>45%</strong></button>
+                  </div>
+                  <div class="noise-level-slider" aria-label="ながし音の微調整">
+                    <button id="noiseVolumeDownBtn" class="noise-step-button" type="button" aria-label="ながし音を5%下げる">−</button>
+                    <input id="noiseVolumeSlider" class="noise-range-desktop" type="range" min="0" max="100" step="1" value="18" aria-label="ながし音の大きさを微調整" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-valuetext="18%" />
+                    <button id="noiseVolumeUpBtn" class="noise-step-button" type="button" aria-label="ながし音を5%上げる">＋</button>
+                  </div>
+                  <button id="noisePreviewBtn" class="noise-preview-button" type="button">▶ ながし音を試す（3秒）</button>
+                  <p class="noise-mobile-note">iPhoneでは、上の大きいボタンか −／＋ で確実に調整できます。</p>
                 </div>
               </div>
             </section>

@@ -36,6 +36,8 @@ const els = {
   noiseVolumeDownBtn: $("noiseVolumeDownBtn"),
   noiseVolumeUpBtn: $("noiseVolumeUpBtn"),
   noiseVolumeValue: $("noiseVolumeValue"),
+  noisePresetButtons: Array.from(document.querySelectorAll("[data-noise-preset]")),
+  noisePreviewBtn: $("noisePreviewBtn"),
   mode: $("mode"),
   targetSeconds: $("targetSeconds"),
   targetSecondsLabel: $("targetSecondsLabel"),
@@ -144,6 +146,10 @@ function bindEvents() {
   els.noiseVolumeSlider.addEventListener("pointerup", handleAmbientNoiseVolumeControl);
   els.noiseVolumeDownBtn?.addEventListener("click", () => nudgeAmbientNoiseVolume(-5));
   els.noiseVolumeUpBtn?.addEventListener("click", () => nudgeAmbientNoiseVolume(5));
+  for (const button of els.noisePresetButtons) {
+    button.addEventListener("click", () => setAmbientNoisePreset(button.dataset.noisePreset));
+  }
+  els.noisePreviewBtn?.addEventListener("click", previewAmbientNoiseFromUserAction);
   els.mode.addEventListener("change", () => {
     reset();
     updateTargetCopy();
@@ -245,7 +251,8 @@ function handleAmbientNoiseModeControl() {
 
   // 古いiPhone保存値の0%に当たった場合も、最初にノイズを選んだ時点で
   // 聞こえる初期値へ戻します。明示的に0%へ動かした人の設定は維持します。
-  if (nextMode !== "none" && state.ambientNoiseVolume <= 0 && !state.ambientNoiseVolumeTouched) {
+  if (nextMode !== "none" && state.ambientNoiseVolume <= 0) {
+    // 「なし」が無音の選択肢なので、音を選んだのに0%へ固定される状態は作らない。
     setAmbientNoiseVolume(DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
   }
 
@@ -263,6 +270,7 @@ function updateAmbientNoiseControls(mode) {
   // iOS Safariでdisabled状態が選択変更後も残ることがあるためでもあります。
   els.noiseVolumeSlider.disabled = false;
   els.noiseVolumeSlider.removeAttribute("aria-disabled");
+  updateAmbientNoisePresetButtons();
 }
 
 function handleAmbientNoiseVolumeControl() {
@@ -277,6 +285,76 @@ function nudgeAmbientNoiseVolume(delta) {
   const next = Math.round(state.ambientNoiseVolume * 100) + delta;
   setAmbientNoiseVolume(next);
   flushAmbientNoiseSave();
+}
+
+function setAmbientNoisePreset(percent) {
+  state.ambientSettingsTouched = true;
+  state.ambientNoiseVolumeTouched = true;
+  setAmbientNoiseVolume(percent);
+  flushAmbientNoiseSave();
+}
+
+function updateAmbientNoisePresetButtons() {
+  const activePercent = Math.round(state.ambientNoiseVolume * 100);
+  for (const button of els.noisePresetButtons) {
+    const value = Number(button.dataset.noisePreset);
+    const active = Number.isFinite(value) && value === activePercent;
+    button.setAttribute("aria-pressed", String(active));
+    button.dataset.active = String(active);
+  }
+}
+
+async function previewAmbientNoiseFromUserAction() {
+  const mode = els.noiseMode.value;
+  state.ambientSettingsTouched = true;
+
+  // iOSでselectのchangeが遅れても、試聴タップ時には必ず画面の選択値を採用する。
+  if (mode !== state.ambientNoiseMode) {
+    setAmbientNoiseMode(mode);
+  }
+
+  if (mode === "none") {
+    els.noisePreviewBtn.textContent = "音の種類を選んでね";
+    window.setTimeout(() => {
+      if (els.noisePreviewBtn) els.noisePreviewBtn.textContent = "▶ ながし音を試す（3秒）";
+    }, 1300);
+    return;
+  }
+
+  if (state.ambientNoiseVolume <= 0) {
+    state.ambientNoiseVolumeTouched = true;
+    setAmbientNoiseVolume(DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT);
+  }
+
+  const original = els.noisePreviewBtn.textContent;
+  els.noisePreviewBtn.disabled = true;
+  els.noisePreviewBtn.textContent = "再生中…";
+  try {
+    configurePlaybackAudioSession();
+    if (state.running) {
+      const ready = await prepareAudioForUserAction({ forceRecreate: false });
+      if (!ready) throw new Error("AUDIO_NOT_READY");
+      const started = await syncAmbientNoise({ restart: true });
+      if (!started) throw new Error("AMBIENT_NOT_STARTED");
+    } else {
+      const started = await audioStore.previewAmbientNoise({
+        mode: state.ambientNoiseMode,
+        level: state.ambientNoiseVolume,
+        durationMs: 3000,
+      });
+      if (!started) throw new Error("AMBIENT_NOT_STARTED");
+    }
+    els.noisePreviewBtn.textContent = "再生中（3秒）";
+  } catch {
+    setAudioRecoveryNeeded(true, "ながし音を開始できませんでした。ほかの音を止めてから、もう一度「ながし音を試す」を押してください。");
+    els.noisePreviewBtn.textContent = "再生できませんでした";
+  } finally {
+    window.setTimeout(() => {
+      if (!els.noisePreviewBtn) return;
+      els.noisePreviewBtn.disabled = false;
+      els.noisePreviewBtn.textContent = original || "▶ ながし音を試す（3秒）";
+    }, 3100);
+  }
 }
 
 function setAmbientNoiseMode(mode, { save = true } = {}) {
@@ -311,6 +389,7 @@ function setAmbientNoiseVolume(percent, { save = true } = {}) {
   els.noiseVolumeSlider.setAttribute("aria-valuenow", String(normalizedPercent));
   els.noiseVolumeSlider.setAttribute("aria-valuetext", `${normalizedPercent}%`);
   els.noiseVolumeValue.textContent = `${normalizedPercent}%`;
+  updateAmbientNoisePresetButtons();
   audioStore.setAmbientNoise({ mode: state.ambientNoiseMode, level: state.ambientNoiseVolume });
 
   if (save) queueAmbientNoiseSave();
