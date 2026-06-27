@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v35-compact-sound-settings";
+const CACHE_NAME = "count-voice-app-v36-mobile-volume-safari";
 const ASSETS = [
   "./",
   "./index.html",
@@ -11,6 +11,12 @@ const ASSETS = [
   "./voice-pack-maker.js",
   "./manifest.webmanifest",
   "./favicon.ico",
+  "./favicon.svg",
+  "./favicon.png",
+  "./favicon-180x180.png",
+  "./favicon-192x192.png",
+  "./favicon-96x96.png",
+  "./safari-pinned-tab.svg",
   "./apple-touch-icon.png",
   "./apple-touch-icon-precomposed.png",
   "./apple-touch-icon-180x180.png",

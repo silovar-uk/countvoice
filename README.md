@@ -180,3 +180,10 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - 折りたたみを開いた時に、カウント表示を過度に押し下げないレイアウトへ変更しました。
 - ながし音は「なし / ホワイト / ブラウン」、音量は「小 15% / 中 30% / 大 45%」の3択です。
 - 新規設定の初期値はブラウンノイズ・中（30%）です。
+
+
+## v36 changes
+
+- On iPhone / mobile devices, the first spoken-volume default is 20%. Desktop remains 50%.
+- Ambient sound now has an explicit `なし 0%` choice before 小 / 中 / 大.
+- Safari bookmark fallbacks include a multi-size favicon, Apple Touch Icons, PNG and SVG root assets.

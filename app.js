@@ -8,11 +8,16 @@ const TICK_INTERVAL_MS = 80;
 const FINISH_GAP_SECONDS = 0.18;
 const FINISH_REPEAT_GAP_SECONDS = 0.42;
 const FINISH_PLAY_COUNT = 2;
-const DEFAULT_APP_VOLUME_PERCENT = 50;
+const MOBILE_APP_VOLUME_DEFAULT_PERCENT = 20;
+const DESKTOP_APP_VOLUME_DEFAULT_PERCENT = 50;
+const APP_VOLUME_DEFAULTS_VERSION = "v36";
+const DEFAULT_APP_VOLUME_PERCENT = isMobileLikeDevice()
+  ? MOBILE_APP_VOLUME_DEFAULT_PERCENT
+  : DESKTOP_APP_VOLUME_DEFAULT_PERCENT;
 const DEFAULT_AMBIENT_NOISE_MODE = "brown";
 const DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT = 30;
-const AMBIENT_NOISE_PRESETS = [15, 30, 45];
-const AMBIENT_NOISE_DEFAULTS_VERSION = "v35";
+const AMBIENT_NOISE_PRESETS = [0, 15, 30, 45];
+const AMBIENT_NOISE_DEFAULTS_VERSION = "v36";
 
 const $ = (id) => document.getElementById(id);
 
@@ -99,6 +104,7 @@ const state = {
   audioRecoveryInFlight: false,
   audioReschedulePromise: null,
   volume: DEFAULT_APP_VOLUME_PERCENT / 100,
+  volumeTouched: false,
   volumeSaveTimer: null,
   ambientNoiseMode: DEFAULT_AMBIENT_NOISE_MODE,
   ambientNoiseVolume: DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT / 100,
@@ -108,6 +114,16 @@ const state = {
 };
 
 init();
+
+function isMobileLikeDevice() {
+  try {
+    return window.matchMedia?.("(pointer: coarse)").matches
+      || window.matchMedia?.("(max-width: 699px)").matches
+      || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  } catch {
+    return false;
+  }
+}
 
 async function init() {
   bindEvents();
@@ -133,7 +149,10 @@ function bindEvents() {
   els.pauseBtn.addEventListener("click", pause);
   els.resetBtn.addEventListener("click", reset);
   els.resumeAudioBtn.addEventListener("click", recoverAudioFromUserAction);
-  els.volumeSlider.addEventListener("input", () => setAppVolume(els.volumeSlider.value));
+  els.volumeSlider.addEventListener("input", () => {
+    state.volumeTouched = true;
+    setAppVolume(els.volumeSlider.value);
+  });
   els.volumeSlider.addEventListener("change", () => flushVolumeSave());
   els.noiseMode.addEventListener("input", handleAmbientNoiseModeControl);
   els.noiseMode.addEventListener("change", handleAmbientNoiseModeControl);
@@ -179,10 +198,33 @@ function bindEvents() {
 }
 
 async function restoreVolume() {
-  const stored = await getValue("appVolume").catch(() => null);
+  const [stored, storedTouched, storedDefaultsVersion] = await Promise.all([
+    getValue("appVolume").catch(() => null),
+    getValue("appVolumeTouched").catch(() => null),
+    getValue("appVolumeDefaultsVersion").catch(() => null),
+  ]);
+
   const parsed = Number(stored);
-  const percent = Number.isFinite(parsed) ? parsed : DEFAULT_APP_VOLUME_PERCENT;
+  const hasStoredValue = Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
+  const didUserSetVolume = storedTouched === true;
+  const shouldMigrateOldMobileDefault = isMobileLikeDevice()
+    && storedDefaultsVersion !== APP_VOLUME_DEFAULTS_VERSION
+    && (!hasStoredValue || (!didUserSetVolume && parsed === DESKTOP_APP_VOLUME_DEFAULT_PERCENT));
+
+  const percent = shouldMigrateOldMobileDefault
+    ? MOBILE_APP_VOLUME_DEFAULT_PERCENT
+    : (hasStoredValue ? parsed : DEFAULT_APP_VOLUME_PERCENT);
+
+  state.volumeTouched = shouldMigrateOldMobileDefault ? false : didUserSetVolume;
   setAppVolume(percent, { save: false });
+
+  if (shouldMigrateOldMobileDefault || storedDefaultsVersion !== APP_VOLUME_DEFAULTS_VERSION) {
+    Promise.all([
+      setValue("appVolume", percent),
+      setValue("appVolumeTouched", state.volumeTouched),
+      setValue("appVolumeDefaultsVersion", APP_VOLUME_DEFAULTS_VERSION),
+    ]).catch(() => {});
+  }
 }
 
 function setAppVolume(percent, { save = true } = {}) {
@@ -202,7 +244,11 @@ function queueVolumeSave() {
   clearTimeout(state.volumeSaveTimer);
   state.volumeSaveTimer = window.setTimeout(() => {
     state.volumeSaveTimer = null;
-    setValue("appVolume", Math.round(state.volume * 100)).catch(() => {});
+    Promise.all([
+      setValue("appVolume", Math.round(state.volume * 100)),
+      setValue("appVolumeTouched", state.volumeTouched),
+      setValue("appVolumeDefaultsVersion", APP_VOLUME_DEFAULTS_VERSION),
+    ]).catch(() => {});
   }, 180);
 }
 
@@ -211,7 +257,11 @@ function flushVolumeSave() {
     clearTimeout(state.volumeSaveTimer);
     state.volumeSaveTimer = null;
   }
-  setValue("appVolume", Math.round(state.volume * 100)).catch(() => {});
+  Promise.all([
+    setValue("appVolume", Math.round(state.volume * 100)),
+    setValue("appVolumeTouched", state.volumeTouched),
+    setValue("appVolumeDefaultsVersion", APP_VOLUME_DEFAULTS_VERSION),
+  ]).catch(() => {});
 }
 
 async function restoreAmbientNoise() {
@@ -267,14 +317,23 @@ function handleAmbientNoiseModeControl() {
   state.ambientSettingsTouched = true;
   const nextMode = els.noiseMode.value;
 
-  // 古いiPhone保存値の0%に当たった場合も、最初にノイズを選んだ時点で
-  // 聞こえる初期値へ戻します。明示的に0%へ動かした人の設定は維持します。
-  if (nextMode !== "none" && state.ambientNoiseVolume <= 0) {
-    // 「なし」が無音の選択肢なので、音を選んだのに0%へ固定される状態は作らない。
+  // 「なし」は明示的に0%へ。小／中／大を選び直した時には、種類をブラウンへ戻します。
+  if (nextMode === "none") {
+    setAmbientNoiseMode("none", { save: false });
+    setAmbientNoiseVolume(0, { save: false });
+    flushAmbientNoiseSave();
+    return;
+  }
+
+  // iPhoneで旧保存値が0%に当たっても、音の種類を選んだ時点で聞こえる値へ戻す。
+  if (state.ambientNoiseVolume <= 0) {
     setAmbientNoiseVolume(DEFAULT_AMBIENT_NOISE_VOLUME_PERCENT, { save: false });
   }
 
-  if (nextMode === state.ambientNoiseMode) return;
+  if (nextMode === state.ambientNoiseMode) {
+    flushAmbientNoiseSave();
+    return;
+  }
   setAmbientNoiseMode(nextMode);
 }
 
@@ -308,7 +367,19 @@ function nudgeAmbientNoiseVolume(delta) {
 function setAmbientNoisePreset(percent) {
   state.ambientSettingsTouched = true;
   state.ambientNoiseVolumeTouched = true;
-  setAmbientNoiseVolume(percent);
+  const normalizedPercent = normalizeAmbientNoiseVolumePercent(percent);
+
+  if (normalizedPercent === 0) {
+    setAmbientNoiseMode("none", { save: false });
+    setAmbientNoiseVolume(0, { save: false });
+  } else {
+    // 「なし」から小／中／大を押した時は、前提となる種類をブラウンへ戻す。
+    setAmbientNoiseVolume(normalizedPercent, { save: false });
+    if (state.ambientNoiseMode === "none") {
+      setAmbientNoiseMode(DEFAULT_AMBIENT_NOISE_MODE, { save: false });
+    }
+  }
+
   flushAmbientNoiseSave();
 }
 
@@ -316,7 +387,11 @@ function updateAmbientNoisePresetButtons() {
   const activePercent = Math.round(state.ambientNoiseVolume * 100);
   for (const button of els.noisePresetButtons) {
     const value = Number(button.dataset.noisePreset);
-    const active = Number.isFinite(value) && value === activePercent;
+    const active = Number.isFinite(value) && (
+      value === 0
+        ? state.ambientNoiseMode === "none"
+        : state.ambientNoiseMode !== "none" && value === activePercent
+    );
     button.setAttribute("aria-pressed", String(active));
     button.dataset.active = String(active);
   }
@@ -408,6 +483,7 @@ function normalizeAmbientNoiseVolumePercent(percent) {
 
 function ambientNoiseVolumeLabel(percent) {
   const level = normalizeAmbientNoiseVolumePercent(percent);
+  if (level === 0) return "なし・0%";
   if (level === 15) return "小・15%";
   if (level === 30) return "中・30%";
   return "大・45%";

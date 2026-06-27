@@ -11,19 +11,22 @@
     <meta name="apple-mobile-web-app-title" content="ぽん、と数える" />
     <meta name="application-name" content="ぽん、と数える" />
     <title>ぽん、と数える</title>
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <!-- Safari/iOS bookmark and home-screen icon fallbacks: keep root copies for Safari discovery. -->
-    <link rel="shortcut icon" href="./favicon.ico" />
-    <link rel="icon" href="./favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-180x180.png" />
-    <link rel="apple-touch-icon" sizes="167x167" href="./apple-touch-icon-167x167.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="./apple-touch-icon-152x152.png" />
-    <link rel="apple-touch-icon" sizes="120x120" href="./apple-touch-icon-120x120.png" />
-    <link rel="apple-touch-icon-precomposed" href="./apple-touch-icon-precomposed.png" />
-    <link rel="stylesheet" href="./styles.css?v=32" />
+    <link rel="manifest" href="./manifest.webmanifest?v=36" />
+    <!-- Safari bookmark / iPhone home-screen fallbacks. Root files are deliberate: Safari probes these paths directly. -->
+    <link rel="shortcut icon" href="./favicon.ico?v=36" />
+    <link rel="icon" href="./favicon.ico?v=36" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=36" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./favicon-192x192.png?v=36" />
+    <link rel="icon" type="image/png" sizes="96x96" href="./favicon-96x96.png?v=36" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png?v=36" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png?v=36" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=36" />
+    <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./apple-touch-icon-precomposed.png?v=36" />
+    <link rel="apple-touch-icon" sizes="167x167" href="./apple-touch-icon-167x167.png?v=36" />
+    <link rel="apple-touch-icon" sizes="152x152" href="./apple-touch-icon-152x152.png?v=36" />
+    <link rel="apple-touch-icon" sizes="120x120" href="./apple-touch-icon-120x120.png?v=36" />
+    <link rel="mask-icon" href="./safari-pinned-tab.svg?v=36" color="#74c84a" />
+    <link rel="stylesheet" href="./styles.css?v=36" />
   </head>
   <body data-app-state="stopped">
     <main class="app-shell">
@@ -125,7 +128,7 @@
         <details id="soundSettings" class="sound-settings">
           <summary>
             <span class="sound-settings-title"><span class="sound-settings-icon" aria-hidden="true">♪</span>音量・ながし音</span>
-            <span id="soundSettingsSummary" class="sound-settings-summary">読み上げ 50%・ながし音 なし</span>
+            <span id="soundSettingsSummary" class="sound-settings-summary">読み上げ 20%・ながし音 ブラウンノイズ 中・30%</span>
           </summary>
           <div class="sound-settings-content">
             <section class="volume-control" aria-label="アプリの音量">
@@ -137,8 +140,8 @@
                 </div>
               </div>
               <div class="volume-slider-wrap">
-                <input id="volumeSlider" type="range" min="0" max="100" step="1" value="50" aria-label="アプリの音量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="50%" />
-                <output id="volumeValue" for="volumeSlider" aria-live="off">50%</output>
+                <input id="volumeSlider" type="range" min="0" max="100" step="1" value="20" aria-label="アプリの音量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="20" aria-valuetext="20%" />
+                <output id="volumeValue" for="volumeSlider" aria-live="off">20%</output>
               </div>
             </section>
 
@@ -166,6 +169,7 @@
                   <output id="noiseVolumeValue" for="noiseVolumeSlider" aria-live="polite">中・30%</output>
                 </div>
                 <div class="noise-preset-grid" role="group" aria-label="ながし音の大きさを選ぶ">
+                  <button class="noise-preset-button noise-off-button" type="button" data-noise-preset="0" aria-pressed="false">なし<strong>0%</strong></button>
                   <button class="noise-preset-button" type="button" data-noise-preset="15" aria-pressed="false">小<strong>15%</strong></button>
                   <button class="noise-preset-button" type="button" data-noise-preset="30" aria-pressed="true">中<strong>30%</strong></button>
                   <button class="noise-preset-button" type="button" data-noise-preset="45" aria-pressed="false">大<strong>45%</strong></button>
