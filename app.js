@@ -1205,7 +1205,18 @@ function usesBufferedPack() {
 
 function shouldSpeak(second, countValue) {
   const interval = Number(els.intervalSeconds.value) || 1;
-  return second % interval === 0 || countValue === 0;
+  const value = Math.max(0, Math.floor(Number(countValue) || 0));
+
+  // 判定基準は「経過した秒数」ではなく、実際に画面へ出ている値。
+  // こうしておくとカウントダウンでも、開始時間が10秒単位でなくても
+  // 残り 1分 / 2分 / 1時間 などの節目を確実に読み上げられる。
+  if (value === 0) return true;
+
+  // 10秒ごとは、10・20・…・50秒に加えて 1分・2分・1時間などの
+  // 単位表現も cueTextForSecond() に任せて読み上げる。
+  if (interval === 10) return value % 10 === 0;
+
+  return value % interval === 0;
 }
 
 async function playTestCue() {
