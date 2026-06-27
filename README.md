@@ -1,4 +1,4 @@
-# CountVoice v35 - compact sound settings
+# CountVoice v37 - pause elapsed timer
 
 This version fixes the `Forbidden` page caused by a path check in the v15 local launcher. It also does not require Python.
 
@@ -187,3 +187,9 @@ After deploying the update, reload once with cache bypass (Windows: `Ctrl + Shif
 - On iPhone / mobile devices, the first spoken-volume default is 20%. Desktop remains 50%.
 - Ambient sound now has an explicit `なし 0%` choice before 小 / 中 / 大.
 - Safari bookmark fallbacks include a multi-size favicon, Apple Touch Icons, PNG and SVG root assets.
+
+
+## v37: 一時停止の経過時間
+- 一時停止中は、メインのカウントとは別に停止してからの経過時間を `HH:MM:SS` で表示します。
+- この停止経過に対する読み上げ・ながし音はありません。
+- 再開またはリセットで停止経過表示はリセットされます。

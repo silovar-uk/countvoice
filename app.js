@@ -29,6 +29,7 @@ const els = {
   targetSummary: $("targetSummary"),
   sessionProgress: $("sessionProgress"),
   cheerMessage: $("cheerMessage"),
+  pauseElapsedDisplay: $("pauseElapsedDisplay"),
   startBtn: $("startBtn"),
   pauseBtn: $("pauseBtn"),
   resetBtn: $("resetBtn"),
@@ -84,6 +85,8 @@ const state = {
   completed: false,
   startedAt: 0,
   pausedElapsed: 0,
+  pauseStartedAt: 0,
+  pauseTimerId: null,
   timerId: null,
   pack: null,
   speakers: [],
@@ -129,6 +132,9 @@ async function init() {
   bindEvents();
   bindAudioRecoverySignals();
   configureMediaSession();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") updatePauseElapsedUI();
+  });
   syncPackLoadUI({ editorOpen: true });
   updateSoundSettingsSummary();
   await restoreVolume();
@@ -578,6 +584,9 @@ async function restorePack() {
 async function start() {
   if (state.running) return;
 
+  // 一時停止中に表示していた「停止してからの時間」は、再開と同時に消します。
+  stopPauseElapsedTimer({ clearStartedAt: true });
+
   if (state.completed) {
     state.pausedElapsed = 0;
     state.nextFallbackSecond = 1;
@@ -618,6 +627,7 @@ function pause() {
   if (!state.running) return;
   state.pausedElapsed = elapsedSeconds();
   state.running = false;
+  state.pauseStartedAt = performance.now();
   clearTimeout(state.timerId);
   stopScheduledAudio();
   audioStore.stopAmbientNoise({ fadeOut: 0 });
@@ -627,6 +637,8 @@ function pause() {
   releaseWakeLock();
   setMediaSessionState("paused");
   render();
+  // 一時停止中の経過は、表示だけを更新します。読み上げ・ながし音は行いません。
+  startPauseElapsedTimer();
   updateBackgroundStatus("一時停止中です。");
 }
 
@@ -634,6 +646,7 @@ function reset() {
   state.running = false;
   state.completed = false;
   clearTimeout(state.timerId);
+  stopPauseElapsedTimer({ clearStartedAt: true });
   state.pausedElapsed = 0;
   state.nextFallbackSecond = 1;
   state.scheduledUntilSecond = 0;
@@ -675,6 +688,7 @@ function completeCount() {
 
   state.running = false;
   state.completed = true;
+  stopPauseElapsedTimer({ clearStartedAt: true });
   state.pausedElapsed = targetSeconds();
   clearTimeout(state.timerId);
   audioStore.stopAmbientNoise({ fadeOut: 0.12 });
@@ -711,6 +725,45 @@ function completeCount() {
 function elapsedSeconds() {
   if (!state.running) return state.pausedElapsed;
   return Math.max(0, (performance.now() - state.startedAt) / 1000);
+}
+
+function isPausedState() {
+  return !state.running && !state.completed && state.pauseStartedAt > 0;
+}
+
+function pauseElapsedSeconds() {
+  if (!isPausedState()) return 0;
+  return Math.max(0, Math.floor((performance.now() - state.pauseStartedAt) / 1000));
+}
+
+function updatePauseElapsedUI() {
+  if (!els.pauseElapsedDisplay) return;
+  const paused = isPausedState();
+  els.pauseElapsedDisplay.hidden = !paused;
+  if (!paused) {
+    els.pauseElapsedDisplay.textContent = "";
+    return;
+  }
+  const elapsed = pauseElapsedSeconds();
+  els.pauseElapsedDisplay.textContent = `一時停止 ${formatClock(elapsed)}`;
+  els.pauseElapsedDisplay.setAttribute("aria-label", `一時停止してから ${formatClockSpeech(elapsed)} 経過`);
+}
+
+function startPauseElapsedTimer() {
+  stopPauseElapsedTimer();
+  const step = () => {
+    if (!isPausedState()) return;
+    updatePauseElapsedUI();
+    state.pauseTimerId = setTimeout(step, 250);
+  };
+  step();
+}
+
+function stopPauseElapsedTimer({ clearStartedAt = false } = {}) {
+  clearTimeout(state.pauseTimerId);
+  state.pauseTimerId = null;
+  if (clearStartedAt) state.pauseStartedAt = 0;
+  updatePauseElapsedUI();
 }
 
 async function scheduleAudioAhead() {
@@ -1421,9 +1474,10 @@ function render() {
   const target = targetSeconds();
   const elapsed = Math.min(Math.floor(elapsedSeconds()), target);
   updateCounterUI(elapsed, target);
-  els.startBtn.textContent = state.completed ? "もう一度開始" : state.pausedElapsed > 0 ? "再開" : "開始";
+  const paused = isPausedState();
+  els.startBtn.textContent = state.completed ? "もう一度開始" : paused ? "再開" : "開始";
   els.pauseBtn.disabled = !state.running;
-  els.resetBtn.disabled = !state.running && state.pausedElapsed === 0 && !state.completed;
+  els.resetBtn.disabled = !state.running && !paused && !state.completed;
   updateTargetCopy();
 }
 
@@ -1434,7 +1488,7 @@ function updateCounterUI(elapsed, target) {
     ? "completed"
     : state.running
       ? "running"
-      : state.pausedElapsed > 0
+      : isPausedState()
         ? "paused"
         : "stopped";
 
@@ -1451,6 +1505,7 @@ function updateCounterUI(elapsed, target) {
     : `ゴールまで ${formatDuration(target)}`;
   els.countState.textContent = statePillCopy(viewState);
   els.cheerMessage.textContent = cheerCopy(viewState, elapsed, target);
+  updatePauseElapsedUI();
 }
 
 function statePillCopy(viewState) {
@@ -1462,7 +1517,7 @@ function statePillCopy(viewState) {
 
 function cheerCopy(viewState, elapsed, target) {
   if (viewState === "completed") return "時間になったのだ！ おつかれさまなのだ。";
-  if (viewState === "paused") return "ひと休みして、また戻ってくればいいのだ。";
+  if (viewState === "paused") return "一時停止中。ここでは時間だけ数えています。";
   if (viewState === "stopped") return "準備OKなのだ。自分のペースでいこう。";
 
   const progress = target ? elapsed / target : 0;

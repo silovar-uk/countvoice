@@ -2617,3 +2617,40 @@ body[data-app-state="completed"][data-sound-settings-open="true"][data-audio-rec
   .noise-preset-button { min-width: 0; min-height: 43px; padding: 4px 2px; font-size: .61rem; }
   .noise-preset-button strong { margin-top: 2px; font-size: .69rem; }
 }
+
+
+/* v37: 一時停止中は、音を出さずに停止経過だけを表示する。 */
+.pause-elapsed-display {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 11px;
+  border: 1px solid rgba(221, 177, 54, .48);
+  border-radius: 999px;
+  background: rgba(255, 248, 219, .92);
+  color: #8b6c19 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .84rem !important;
+  font-weight: 950;
+  letter-spacing: .04em !important;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.78);
+}
+.pause-elapsed-display[hidden] { display: none !important; }
+body[data-app-state="paused"] .readout-copy {
+  grid-template-rows: auto auto auto auto;
+  gap: 8px;
+}
+body[data-app-state="paused"] #modeLabel { color: #8b6c19; }
+@media (max-width: 699px) {
+  .pause-elapsed-display {
+    min-height: 25px;
+    padding: 3px 9px;
+    font-size: .74rem !important;
+  }
+  body[data-app-state="paused"] .readout-copy { gap: 5px; }
+}
+@media (max-height: 680px) {
+  .pause-elapsed-display { min-height: 22px; padding: 2px 8px; font-size: .68rem !important; }
+}

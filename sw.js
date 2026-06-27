@@ -1,4 +1,4 @@
-const CACHE_NAME = "count-voice-app-v36-mobile-volume-safari";
+const CACHE_NAME = "count-voice-app-v37-pause-elapsed";
 const ASSETS = [
   "./",
   "./index.html",
